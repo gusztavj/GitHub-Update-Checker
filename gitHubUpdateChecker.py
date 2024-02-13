@@ -148,7 +148,7 @@ class RepositoryAccessManager:
     
     def token(self):
         """A token restricted only to read code from Blender add-on repos (public anyway)"""
-        os.environ['GITHUB_API_TOKEN'] = 'Z2l0aHViX3BhdF8xMUFDM1Q1RlEwU0tYU1hKazAyVGE4X2lnRUoxMnJxYWlXc2ljdUp2UjNWVEVnNm5SemN1eGpNdzVLUTJ2WGwwMWozRlhRNU0zQWsxa0FSaG80'
+        os.environ['GITHUB_API_TOKEN'] = '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'
         return os.environ.get('GITHUB_API_TOKEN')
     
     
@@ -626,7 +626,7 @@ def checkUpdates(forceUpdateCheck: bool = False):
                     apiLimitResetsAt = datetime.fromtimestamp(int(response.headers["x-ratelimit-reset"]))
                     
                     # Change last check date so that no new check is made before that time
-                    updateInfo.repository.lastCheckedTimestamp = apiLimitResetsAt - timedelta(days=updateInfo.checkFrequencyDays)
+                    updateInfo.repository.lastCheckedTimestamp = apiLimitResetsAt - timedelta(days=updateInfo.repository.checkFrequencyDays)
                     whatHappened = f"API limit exceeded, and will be reset at {apiLimitResetsAt}. " + \
                                     "Next non-forced check will be made afterwards only."
                 case 404:
@@ -644,13 +644,14 @@ def checkUpdates(forceUpdateCheck: bool = False):
         # Being here means a response has been received successfully
         
         # Save timestamp
-        updateInfo.repository.lastCheckedTimestamp = datetime.now()
-        #f"{datetime.strftime(datetime.now(), app.config['dateTimeFormat'])}"
+        updateInfo.repository.lastCheckedTimestamp = datetime.now()        
     
         updateInfo.repository.latestVersionName = response.json()["name"]
         updateInfo.repository.latestVersion = response.json()["tag_name"]
         updateInfo.repository.repoUrl = repoConn.repoUrl()
         updateInfo.repository.releaseUrl = repoConn.repoReleaseApiUrl() 
+        
+        app.logger.debug(f"Update info received from GitHub: {updateInfo}")
         
         try:        
             # Trim leading v and eventual trailing qualifiers such as -alpha
@@ -683,6 +684,7 @@ def checkUpdates(forceUpdateCheck: bool = False):
                     if len(currentVersionTags) > 2 and latestVersionTags[2] > currentVersionTags[2]:
                         updateInfo.updateAvailable = True
 
+            app.logger.debug(f"New version available: {updateInfo.updateAvailable}")
         except Exception as err:
             raise RequestError(
                 responseMessage="Invalid version in 'currentVersion' of 'AppInfo'. Version shall be specified as (x, y, z).",
