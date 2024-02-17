@@ -1,6 +1,8 @@
 # VSCODE
 GitHub-Update-Checker.code-workspace
 .vscode/
+GitHubUpdateChecker.log*
+GitHubUpdateChecker.log.*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

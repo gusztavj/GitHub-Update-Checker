@@ -48,24 +48,47 @@
 # *********************************************************************************************************************************
 
 from __future__ import annotations
-import contextlib
-import requests
-import re
-from datetime import datetime, timedelta
-import time
 from dataclasses import dataclass
-import json
+from datetime import datetime, timedelta
 from json import JSONEncoder, JSONDecoder
-import os
-from flask import Flask, jsonify, request, make_response, Response, g
-import loghelper
-import logging
 from logging.config import dictConfig
 from typing import List
+import contextlib
+import json
+import logging
+import os
+import re
+import requests
+import time
 
+from flask import Flask, jsonify, request, make_response, Response, g
+from flask.logging import default_handler
+from pydantic import BaseModel, validator
+
+import customExceptions
+from customExceptions import RequestError, EnvironmentError, UpdateCheckingError
+
+import repository
+from repository import RepositoryAccessManager, RepositoryStore, RepositoryStoreManager, UpdateInfo
+
+import importlib
+
+# importlib.reload(customExceptions)
+# importlib.reload(repository)
+
+
+# Preparatory steps ===============================================================================================================
+
+# Convert timestamps to UTC -------------------------------------------------------------------------------------------------------
 class UTCFormatter(logging.Formatter):
+    """Formatter class for logging with UTC time.
+
+    This class extends the logging.Formatter class and overrides the converter attribute to use the `gmtime` function for UTC time conversion.
+
+    """
     converter = time.gmtime
 
+# Log configuration ---------------------------------------------------------------------------------------------------------------
 dictConfig(
     {
         "version": 1,
@@ -102,371 +125,14 @@ dictConfig(
 app = Flask(__name__)
 """Flask app"""
 
+repository.app = app
 
 # Init stuff ======================================================================================================================
-from flask.logging import default_handler
 app.logger.removeHandler(default_handler)
-
 app.secret_key = "d8ca62a10b0650feb93429bb9eb17a3c968375d6db418b9e"
 app.logger.setLevel(logging.DEBUG)
 app.config["repoRepository"] = {}
 app.config["dateTimeFormat"] = "%Y-%m-%d %H:%M:%S"
-
-# Classes #########################################################################################################################
-
-# Repository information for help and updates *************************************************************************************
-class RepositoryAccessManager:
-    """
-    Information to access the repository for update checking and help access.
-    """
-        
-    _repoBase = "https://github.com/gusztavj/"
-    """Base address of my repositories"""
-    
-    _repoApiBase = "https://api.github.com/repos/gusztavj/"
-    """Base address of my repositories for API calls"""
-    
-    repoSlug = ""
-    """Slug for the repository"""
-
-    def repoUrl(self) -> str:
-        return RepositoryAccessManager._repoBase + self.repoSlug
-    """URL of the repository"""
-        
-    def repoReleaseApiUrl(self) -> str:
-        """API URL to get latest release information"""
-        return RepositoryAccessManager._repoApiBase + self.repoSlug + "releases/latest"
-    
-    def repoReleasesUrl(self) -> str:
-        """URL of the releases page of the repository"""
-        return RepositoryAccessManager._repoBase + self.repoSlug + "releases"    
-    
-    username = "gusztavj"
-    """My username for API access"""
-    
-    def token(self):
-        """A token restricted only to read code from Blender add-on repos (public anyway)"""
-        os.environ['GITHUB_API_TOKEN'] = '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'
-        return os.environ.get('GITHUB_API_TOKEN')
-    
-    
-    def __init__(self, repoSlug: str):
-        if repoSlug[len(repoSlug)-1] != "/":
-            repoSlug += "/"
-
-        self.repoSlug = repoSlug
-
-# Request payload *****************************************************************************************************************
-@dataclass 
-class AppInfo:
-    """
-    Data structure parsed from the body of POST requests for checking updates.
-    """
-    
-    repoSlug: str = ""
-    """The slug of the repo as in `https://github.com/repos/<user>/<reposlug>`"""
-    
-    currentVersion: str = ""
-    """Version number of the current version running in `x.y.z` format"""
-    
-# GitHub access data **************************************************************************************************************
-class GitHubAccess:
-    """
-    Credentials to access GitHub.
-    """
-    pass
-
-# Structured repository info ******************************************************************************************************
-@dataclass
-class Repository:
-    """Release information associated with a GitHub repository"""
-    
-    # Properties ==================================================================================================================
-    
-    repoSlug: str = ""
-    """The slug of the repo as in https://github.com/repos/<user>/<reposlug>"""
-    
-    checkFrequencyDays: int = 3
-    """
-    Frequency of checking for new updates (days).
-    """
-    
-    latestVersion: str = ""
-    """
-    Version number of the latest release (the release tag from the repo) on GitHub.
-    """
-    
-    latestVersionName: str = ""
-    """
-    Name of the latest release on GitHub.
-    """
-    
-    lastCheckedTimestamp: datetime = datetime.now() - timedelta(days=checkFrequencyDays + 1)
-    """
-    Date and time of last successful check for updates. Defaults to a value to enforce checking as the default means no checks
-    have been made yet.
-    """
-    
-    releaseUrl: str = ""
-    """
-    The URL to get the latest release
-    """
-    
-    repoUrl: str = ""
-    """
-    The URL of the repository
-    """
-    
-    def __init__(self,
-        repoSlug: str = "", 
-        checkFrequencyDays: int = 3, 
-        latestVersion: str = "", 
-        latestVersionName: str = "", 
-        lastCheckedTimestamp: datetime = None,
-        releaseUrl: str = "", 
-        repoUrl: str = ""):
-        
-        self.repoSlug = repoSlug
-        self.checkFrequencyDays = checkFrequencyDays
-        self.latestVersion = latestVersion
-        self.latestVersionName = latestVersionName
-        self.lastCheckedTimestamp = lastCheckedTimestamp if lastCheckedTimestamp is not None else datetime.now() - timedelta(days=checkFrequencyDays + 1)
-        self.releaseUrl = releaseUrl
-        self.repoUrl = repoUrl
-
-class RepositoryEncoder(JSONEncoder):
-        def default(self, o):
-            if type(o) == datetime:
-                return datetime.strftime(o, app.config["dateTimeFormat"])
-            else:
-                return o.__dict__
-
-class RepositoryDecoder():
-    
-    @staticmethod
-    def decode(dct):
-        try:
-            return Repository(
-                repoSlug=dct["repoSlug"],
-                checkFrequencyDays=dct["checkFrequencyDays"],
-                latestVersion=dct["latestVersion"],
-                latestVersionName=dct["latestVersionName"],
-                lastCheckedTimestamp=datetime.strptime(
-                    dct["lastCheckedTimestamp"], app.config["dateTimeFormat"]
-                ),
-                releaseUrl=dct["releaseUrl"],
-                repoUrl=dct["repoUrl"],
-            )
-        except Exception as err:
-            app.logger.exception(f"Could not decode repo store file for an error of {type(err).__name__}. Details: {err}")
-
-class RepositoryStore(List[Repository]):
-    pass
-        
-class RepositoryStoreManager:
-    repos: RepositoryStore = RepositoryStore()
-    _repoStore: str = "repo-repo.json"
-    _repoRepositoryKey: str = "repoRepository"
-    
-    # Public functions ============================================================================================================
-
-    @staticmethod
-    def _populateRepositories():
-        RepositoryStoreManager.repos = RepositoryStore()
-        repoDict = app.config[RepositoryStoreManager._repoRepositoryKey]
-
-        for repo in repoDict:
-            RepositoryStoreManager.repos.append(RepositoryDecoder.decode(repo))
-    
-    @staticmethod
-    def getUpdateInfoFromRepoRepository(repoSlug) -> UpdateInfo:
-        """Get the update information from the repository repository.
-
-        Args:
-            repoSlug (str): The repository slug.
-
-        Returns:
-            UpdateInfo: The update information object.
-
-        """
-        # Load repos from store on demand        
-        repos = RepositoryStoreManager._loadRepoRepository()
-
-        updateInfo: UpdateInfo = UpdateInfo()
-
-        if RepositoryStoreManager.repos is not None and len(RepositoryStoreManager.repos) > 0: # the store is not empty
-                # Load cached info
-            for repo in RepositoryStoreManager.repos:
-                if repo.repoSlug == repoSlug: # this is it
-                    updateInfo.repository = repo
-                    break # found it, need no more loops
-
-            # Create new repo info if no stored info is available    
-        if updateInfo.repository is None or updateInfo.repository.repoSlug is None or len(updateInfo.repository.repoSlug) == 0:
-            updateInfo.repository = Repository()
-            updateInfo.repository.repoSlug = repoSlug
-        return updateInfo
-
-    # Load repository of known GitHub repositories --------------------------------------------------------------------------------
-    @staticmethod
-    def _loadRepoRepository() -> RepositoryStore:
-        """Load repository of known GitHub repositories and populate into app.config["repoRepository"]"""
-        
-        if RepositoryStoreManager.repos is not None and len(RepositoryStoreManager.repos) > 0:
-            # Already loaded
-            return
-        
-        if RepositoryStoreManager._repoRepositoryKey not in app.config.keys() or len(app.config[RepositoryStoreManager._repoRepositoryKey].keys()) == 0: 
-            # No repository loaded or it's empty
-        
-            # Try to open repo repository file ----------------------------------------------------------------------------------------
-            repoRepository = {}
-            
-            if os.path.exists(RepositoryStoreManager._repoStore) and os.path.isfile(RepositoryStoreManager._repoStore):    
-                try:
-                    with open(RepositoryStoreManager._repoStore) as f:
-                        repoRepository = json.load(f)
-                        
-                    app.config[RepositoryStoreManager._repoRepositoryKey] = repoRepository
-                    
-                    RepositoryStoreManager._populateRepositories()
-                    
-                except Exception as ex:
-                    app.logger.error(f"Could not open repo repository '{RepositoryStoreManager._repoStore}' for an error of {type(ex).__name__}: {ex}")            
-                    # Do not reset app.config["repoRepository"], it may contain some not too old information, better than nothing
-                    
-                    # Fail silently
-                    return None
-        
-        RepositoryStoreManager._populateRepositories()
-        
-        return RepositoryStoreManager.repos
-    
-    # Save repository of known GitHub repositories ------------------------------------------------------------------------------------
-    @staticmethod
-    def saveRepoRepository() -> None:
-        """Save repository of known GitHub repositories"""
-        
-        try:
-            with open(RepositoryStoreManager._repoStore, "w") as f:
-                f.write(json.dumps(RepositoryStoreManager.repos, cls=RepositoryEncoder, indent=4))
-        except Exception as ex:
-            app.logger.error(f"Could not save repo repository '{RepositoryStoreManager._repoStore}' for an error of {type(ex).__name__}: {ex}")
-            
-
-
-# Structured update info **********************************************************************************************************
-@dataclass
-class UpdateInfo():
-    """
-    A RepoInfo class extended with information whether an update is available for the client
-    """
-    
-    repository: Repository
-    """
-    The repository about which this object collects update information
-    """
-
-            
-    updateAvailable: bool = False
-    """
-    Tells whether an update is available (`True`) for the repository in `repository`.
-    """
-    
-    
-    def __init__(self):
-        self.repository = Repository()
-        self.updateAvailable = False
-
-
-# Base custom exception to support debugging **************************************************************************************
-class StructuredErrorInfo(Exception):
-    """
-    Error information with separate log message and response information to centralize processing.
-    """
-    
-    # Properties ==================================================================================================================
-    responseMessage: str
-    """The message to return to the caller."""
-    
-    responseCode: int
-    """The HTTP response code to return."""
-    
-    logEntries: list = []
-    """Lines to write to the log in one transaction so that they appear in one block as a string list."""
-    
-    innerException: Exception
-    """The original exception triggering this one to be registered."""
-    
-    def response(self) -> Response:
-        """The response to return for an error."""
-        responseJson = {"error": self.responseMessage}
-        return make_response(jsonify(responseJson), self.responseCode)
-    
-    # Lifecycle management ========================================================================================================
-    def __init__(self, responseMessage: str, responseCode: int, logEntries: None, innerException: Exception = None):
-        """Register a new error.
-
-        Args:
-            responseMessage (str): The message to return to the caller.
-            responseCode (int): The HTTP response code to return.
-            logEntries (list, optional): Lines to write to the log in one transaction so that they appear in one block as a string list. Defaults to [].
-            innerException (Exception, optional): The original exception triggering this one to be registered.. Defaults to None.
-        """
-        self.responseMessage = responseMessage        
-        self.responseCode = responseCode
-        self.logEntries = logEntries if logEntries is not None else []
-        self.innerException = innerException        
-        
-    
-# Errors related to requests ******************************************************************************************************
-class RequestError(StructuredErrorInfo):
-    """Represents an error related to request processing. Subclass of `StructuredErrorInfo`."""
-    
-    # Lifecycle management ========================================================================================================
-    def __init__(self, responseMessage: str, responseCode: int, logEntries: None, innerException: Exception = None):
-        """Register a new error of this kind.
-
-        Args:
-            responseMessage (str): The message to return to the caller.
-            responseCode (int): The HTTP response code to return.
-            logEntries (list, optional): Lines to write to the log in one transaction so that they appear in one block as a string list. Defaults to [].
-            innerException (Exception, optional): The original exception triggering this one to be registered.. Defaults to None.
-        """
-        super().__init__(responseMessage=responseMessage, responseCode=responseCode, logEntries=logEntries, innerException=innerException)
-        
-# Errors related to update checking ***********************************************************************************************
-class UpdateCheckingError(StructuredErrorInfo):
-    """Represents an error related to update checking. Subclass of `StructuredErrorInfo`."""
-    
-    def __init__(self, responseMessage: str, responseCode: int, logEntries = None, innerException: Exception = None):
-        """Register a new error of this kind.
-
-        Args:
-            responseMessage (str): The message to return to the caller.
-            responseCode (int): The HTTP response code to return.
-            logEntries (list, optional): Lines to write to the log in one transaction so that they appear in one block as a string list. Defaults to [].
-            innerException (Exception, optional): The original exception triggering this one to be registered.. Defaults to None.
-        """
-        super().__init__(responseMessage=responseMessage, responseCode=responseCode, logEntries=logEntries, innerException=innerException)
-        
-# Errors related to environmental issues ******************************************************************************************
-class EnvironmentError(StructuredErrorInfo):
-    """Represents an error related to enrivonment or infrastructure issues. Subclass of `StructuredErrorInfo`."""
-
-    def __init__(self, responseMessage: str, responseCode: int, logEntries: None, innerException: Exception = None):
-        """Register a new error of this kind.
-
-        Args:
-            responseMessage (str): The message to return to the caller.
-            responseCode (int): The HTTP response code to return.
-            logEntries (list, optional): Lines to write to the log in one transaction so that they appear in one block as a string list. Defaults to [].
-            innerException (Exception, optional): The original exception triggering this one to be registered.. Defaults to None.
-        """
-        super().__init__(responseMessage=responseMessage, responseCode=responseCode, logEntries=logEntries, innerException=innerException)
-
-
-
 
 
 
@@ -486,10 +152,10 @@ def get_foo():
 
 # Get update information ==========================================================================================================
 @app.post("/getUpdateInfo")
-def checkUpdates(forceUpdateCheck: bool = False):
+def checkUpdates():
     """
     Performs update check for the add-on and caches results. The cache expires in some days as specified in
-    `Repository.checkFrequencyDays`, and then new check is performed. Until that the
+    `Repository.getCheckFrequencyDays()`, and then new check is performed. Until that the
     cached information is served.
     """
     response = None
@@ -524,7 +190,7 @@ def checkUpdates(forceUpdateCheck: bool = False):
 
         # Load cached repository info if exist in repository store ----------------------------------------------------------------
 
-        # Get stored or brand new updateInfo
+        # Get stored or brand new updateInfo        
         updateInfo = RepositoryStoreManager.getUpdateInfoFromRepoRepository(repoSlug)
 
         # See if update check is necessary ----------------------------------------------------------------------------------------
@@ -533,8 +199,8 @@ def checkUpdates(forceUpdateCheck: bool = False):
         if not forceUpdateCheck:            
             # Check if update check shall be performed based on frequency and suppress error if it cannot to not bother the user
             with contextlib.suppress(Exception):
-                delta = datetime.now() - updateInfo.repository.lastCheckedTimestamp
-                if delta.days < updateInfo.repository.checkFrequencyDays: # recently checked
+                delta = datetime.now() - updateInfo.repository.getLastCheckedTimestamp()
+                if delta.days < updateInfo.repository.getCheckFrequencyDays(): # recently checked
                     # Successfully checked for updates in the last checkFrequencyDays number of days
                     # so no need for a repeated check.
 
@@ -548,7 +214,7 @@ def checkUpdates(forceUpdateCheck: bool = False):
             forceUpdateCheck = False
 
         # Submit request ----------------------------------------------------------------------------------------------------------
-        repoConn = RepositoryAccessManager(repoSlug=updateInfo.repository.repoSlug)
+        repoConn = RepositoryAccessManager(repoSlug=updateInfo.repository.getRepoSlug())
         response, updateInfo = _getUpdateInfoFromGitHub(repoConn, updateInfo)                
 
         # Being here means a response has been received successfully
@@ -565,7 +231,7 @@ def checkUpdates(forceUpdateCheck: bool = False):
 
         # Check if the repo is registered (even if it was not at the beginning, since a parallel request
         # might have resulted in adding it) and add the repo to the store if it's still not there
-        if not [repo for repo in RepositoryStoreManager.repos if repo.repoSlug == repoSlug]:            
+        if not [repo for repo in RepositoryStoreManager.repos if repo.getRepoSlug() == updateInfo.repository.getRepoSlug()]:
             # Add the repo info created right before
             RepositoryStoreManager.repos.append(updateInfo.repository)
 
@@ -601,7 +267,7 @@ def checkUpdates(forceUpdateCheck: bool = False):
     return response
 
 # Populate update info object from GitHub response ================================================================================
-def _populateUpdateInfoFromGitHubResponse(response, updateInfo, repoConn):
+def _populateUpdateInfoFromGitHubResponse(response: Response, updateInfo: UpdateInfo, repoConn: RepositoryAccessManager):
     """Populate the update information from the GitHub response.
 
     Args:
@@ -614,7 +280,7 @@ def _populateUpdateInfoFromGitHubResponse(response, updateInfo, repoConn):
 
     """
     # Save timestamp
-    updateInfo.repository.lastCheckedTimestamp = datetime.now()        
+    updateInfo.repository.setLastCheckedTimestamp(datetime.now())
 
     updateInfo.repository.latestVersionName = response.json()["name"]
     updateInfo.repository.latestVersion = response.json()["tag_name"]
@@ -627,14 +293,14 @@ def _getUpdateInfoFromGitHub(repoConn: RepositoryAccessManager, updateInfo: Upda
     """Get update information from GitHub.
 
     Args:
-        repoConn (RepositoryAccessManager): A repository connection object.
-        updateInfo (UpdateInfo): The update information object.
+        repoConn (repository.RepositoryAccessManager): A repository connection object.
+        updateInfo (repository.UpdateInfo): The update information object.
 
     Returns:
-        tuple[Response, UpdateInfo]: A tuple containing the response object and the updated updateInfo object.
+        tuple[Response, repository.UpdateInfo]: A tuple containing the response object and the updated updateInfo object.
 
     Raises:
-        UpdateCheckingError: If there is an error while checking for updates.
+        customExceptions.UpdateCheckingError: If there is an error while checking for updates.
 
     """
     
@@ -644,7 +310,7 @@ def _getUpdateInfoFromGitHub(repoConn: RepositoryAccessManager, updateInfo: Upda
             pass  # Process the response here as needed
     except requests.exceptions.Timeout as tex:
         # Timeout when checking GitHub
-        app.logger.warning(f"Version checking timed out for {updateInfo.repository.repoSlug}")
+        app.logger.warning(f"Version checking timed out for {updateInfo.repository.getRepoSlug()}")
 
             # Don't bother the user, just return that there's no update
         updateInfo.updateAvailable = False
@@ -673,10 +339,7 @@ def _getUpdateInfoFromGitHub(repoConn: RepositoryAccessManager, updateInfo: Upda
                     int(response.headers["x-ratelimit-reset"])
                 )
 
-                updateInfo.repository.lastCheckedTimestamp = (
-                    apiLimitResetsAt
-                    - timedelta(days=updateInfo.repository.checkFrequencyDays)
-                )
+                updateInfo.repository.setLastCheckedTimestamp(apiLimitResetsAt - timedelta(days=updateInfo.repository.getCheckFrequencyDays()))
                 whatHappened = f"API limit exceeded, and will be reset at {apiLimitResetsAt}. Next non-forced check will be made afterwards only."
             case 404:
                 whatHappened = "GitHub returned with HTTP 404. The repo URL specified in the request does not exist. Unknown repo specified?"
@@ -706,7 +369,7 @@ def _parseRequest(requestJson) -> tuple[bool, str, str]:
         to provide information about, and clientCurrentVersion (str) specifying the current version of the app running on the client.
 
     Raises:
-        RequestError: If there is an error parsing the request JSON.
+        customExceptions.RequestError: If there is an error parsing the request JSON.
 
     """
     if "AppInfo" in requestJson.keys():

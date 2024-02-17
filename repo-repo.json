@@ -2,18 +2,18 @@
     {
         "repoSlug": "T1nkR-Mesh-Name-Synchronizer",
         "checkFrequencyDays": 3,
+        "lastCheckedTimestamp": "2024-02-18 00:11:59",
         "latestVersion": "v1.0.2",
         "latestVersionName": "T1nk-R Mesh Name Synchronizer add-on for Blender v1.0.2",
-        "lastCheckedTimestamp": "2024-02-17 00:46:13",
         "releaseUrl": "https://api.github.com/repos/gusztavj/T1nkR-Mesh-Name-Synchronizer/releases/latest",
         "repoUrl": "https://github.com/gusztavj/T1nkR-Mesh-Name-Synchronizer/"
     },
     {
         "repoSlug": "Custom-Object-Property-Manager",
         "checkFrequencyDays": 3,
+        "lastCheckedTimestamp": "2024-02-15 22:42:58",
         "latestVersion": "v1.2.0",
         "latestVersionName": "Custom Object Property Manager for Blender 3.3+ v1.2.0",
-        "lastCheckedTimestamp": "2024-02-15 22:42:58",
         "releaseUrl": "https://api.github.com/repos/gusztavj/Custom-Object-Property-Manager/releases/latest",
         "repoUrl": "https://github.com/gusztavj/Custom-Object-Property-Manager/"
     }
