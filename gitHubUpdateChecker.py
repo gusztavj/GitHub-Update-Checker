@@ -63,18 +63,12 @@ import time
 
 from flask import Flask, jsonify, request, make_response, Response, g
 from flask.logging import default_handler
-from pydantic import BaseModel, validator
-
-import customExceptions
 from customExceptions import RequestError, EnvironmentError, UpdateCheckingError
 
 import repository
-from repository import RepositoryAccessManager, RepositoryStore, RepositoryStoreManager, UpdateInfo
+from repository import RepositoryAccessManager, Repository, RepositoryStoreManager, UpdateInfo
 
 import importlib
-
-# importlib.reload(customExceptions)
-# importlib.reload(repository)
 
 
 # Preparatory steps ===============================================================================================================
@@ -127,12 +121,15 @@ app = Flask(__name__)
 
 repository.app = app
 
+dateTimeFormat = "%Y-%m-%d %H:%M:%S"
+"""Date and time format for business data"""
+
 # Init stuff ======================================================================================================================
 app.logger.removeHandler(default_handler)
 app.secret_key = "d8ca62a10b0650feb93429bb9eb17a3c968375d6db418b9e"
 app.logger.setLevel(logging.DEBUG)
 app.config["repoRepository"] = {}
-app.config["dateTimeFormat"] = "%Y-%m-%d %H:%M:%S"
+app.config["dateTimeFormat"] = dateTimeFormat
 
 
 
@@ -375,25 +372,7 @@ def _parseRequest(requestJson) -> tuple[bool, str, str]:
     if "AppInfo" in requestJson.keys():
         appInfoJson = requestJson["AppInfo"]
         if "repoSlug" in appInfoJson.keys():
-            repoSlug = appInfoJson["repoSlug"]
-            if len(repoSlug) == 0:
-                whatHappened = "The value of the 'repoSlug' key in the 'AppInfo' object is empty, can't find out which repo to check."
-                raise RequestError(
-                        responseCode=400,
-                        responseMessage=whatHappened,
-                        logEntries=[whatHappened],
-                        innerException=None)
-            if repoSlug == "/":
-                whatHappened = "The value of the 'repoSlug' key in the 'AppInfo' object is just a slash, can't find out which repo to check."
-                raise RequestError(
-                        responseCode=400,
-                        responseMessage=whatHappened,
-                        logEntries=[whatHappened],
-                        innerException=None)
-
-                # Remove trailing slash to make neutral against slashing favors
-            if repoSlug[-1] == "/": repoSlug = repoSlug[:-1]
-
+            repoSlug = Repository.ensureRepoSlug(repoSlugToSet=appInfoJson['repoSlug'], fromCustomerRequest=True)
             app.logger.info(f"Update check requested for repo: {repoSlug}")
         else:
             whatHappened = "The 'repoSlug' key is missing from the 'AppInfo' object, can't find out which repo to check."

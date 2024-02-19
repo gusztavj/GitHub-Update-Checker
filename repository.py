@@ -1,16 +1,18 @@
 from __future__ import annotations
-from dataclasses import dataclass
-from datetime import datetime, timedelta
-from json import JSONEncoder, JSONDecoder
-from logging.config import dictConfig
-from typing import List, Optional
+
 import json
 import os
 import re
+import uuid
+
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from json import JSONEncoder, JSONDecoder
+from typing import List, Optional
 
 
 import customExceptions
-from customExceptions import RequestError, EnvironmentError, UpdateCheckingError
+from customExceptions import RequestError, EnvironmentError
 
 # Global stuff ####################################################################################################################
 app = None
@@ -48,14 +50,14 @@ class RepositoryAccessManager:
             repoSlugToSet (str): The value to set for the `repoSlug` property.
 
         Raises:
-            TypeError: Proposed value is of wrong type.
-            ValueError: Proposed value is not a valid URI segment.
+            EnvironmentError: Proposed value is of wrong type or not a valid URI segment.
 
         Returns:
-            None
+            The normalized repo slug, corrected if necessary.
+
         """
         
-        self._repoSlug = Repository.normalizeRepoSlug(repoSlugToSet)
+        self._repoSlug = Repository.ensureRepoSlug(repoSlugToSet)
         
     # Get repo slug ---------------------------------------------------------------------------------------------------------------
     def getRepoSlug(self) -> str | None:
@@ -72,7 +74,6 @@ class RepositoryAccessManager:
     def repoUrl(self) -> str:
         """URL of the repository"""
             
-        self._performRepoSlugValidations("repo URL")
         return self._repoBase + self.getRepoSlug() + "/"
     
     
@@ -80,34 +81,14 @@ class RepositoryAccessManager:
     def repoReleaseApiUrl(self) -> str:
         """API URL to get latest release information"""
         
-        self._performRepoSlugValidations("repo release API URL")
         return self._repoApiBase + self.getRepoSlug() + "/releases/latest"
     
     # Get Releases page of the repo -----------------------------------------------------------------------------------------------
     def repoReleasesUrl(self) -> str:
         """URL of the releases page of the repository"""
         
-        self._performRepoSlugValidations("repo release URL")
         return self._repoBase + self.getRepoSlug() + "/releases/"    
 
-    # Check when repo slug is invalid ---------------------------------------------------------------------------------------------
-    def _performRepoSlugValidations(self, propertyServed: str):
-        """Check conditions preventing computation of a property.
-
-        Args:
-            propertyServed (str): The human readable name of what is being served
-
-        Raises:
-            ValueError: If the repo slug is None, empty string or a single dash
-        """
-        
-        if self.getRepoSlug() is None:
-            raise ValueError(f"Cannot get ${propertyServed} since the repository slug is None")
-        if len(self.getRepoSlug()) == 0:
-            raise ValueError(f"Cannot get ${propertyServed} since the repository slug is empty string")
-        if self.getRepoSlug() == "/":
-            raise ValueError(f"Cannot get ${propertyServed} URL since the repository slug is just a dash")    
-    
     # Get username ----------------------------------------------------------------------------------------------------------------
     def username(self):
         """Username for API access"""
@@ -198,14 +179,13 @@ class Repository:
             repoSlugToSet (str): The value to set for the `repoSlug` property.
 
         Raises:
-            TypeError: Proposed value is of wrong type.
-            ValueError: Proposed value is not a valid URI segment.
+            EnvironmentError: Proposed value is of wrong type or not a valid URI segment.
 
         Returns:
-            None
+            The normalized repo slug, corrected if necessary.
         """
         
-        self.repoSlug = Repository.normalizeRepoSlug(repoSlugToSet)
+        self.repoSlug = Repository.ensureRepoSlug(repoSlugToSet)
         
     # Get repo slug ---------------------------------------------------------------------------------------------------------------
     def getRepoSlug(self) -> str | None:
@@ -226,13 +206,15 @@ class Repository:
             frequency (int): Check for updates with a frequency of this many days.
 
         Raises:
-            customExceptions.RequestError: The argument is not a positive integer.
+            EnvironmentError: The argument is not a positive integer.
         """
-        if not isinstance(frequency, int) or frequency < 1:
-            raise RequestError(
-                responseMessage="Check frequency days shall be a natural number greater than zero.",
-                responseCode=400,
-                logEntries=[f"Wanted to set check frequency but it's not number or not positive integer, but a {type(frequency).__name__}"]
+        
+        if not isinstance(frequency, int) or frequency < 1:            
+            errorKey = uuid.SafeUUID
+            raise EnvironmentError(
+                responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
+                responseCode=500,
+                logEntries=[f"Error key {errorKey}. Wanted to set check frequency but it's not number or not positive integer, but a {type(frequency).__name__}"]
             )
         
         self.checkFrequencyDays = frequency
@@ -254,7 +236,7 @@ class Repository:
             None
 
         Raises:
-            customExceptions.RequestError: If the value is not a `datetime` object.
+            RequestError: If the value is not a `datetime` object.
 
         """
         
@@ -262,10 +244,11 @@ class Repository:
             timestamp = datetime.now() - timedelta(days=self.checkFrequencyDays + 1)
         
         if not isinstance(timestamp, datetime):
-            raise RequestError(
-                responseMessage="The timestamp of the last check shall be a datetime object.",
-                responseCode=400,
-                logEntries=[f"Wanted to set update check timestamp but it's not a datetime object, but a {type(timestamp).__name__}"]
+            errorKey = uuid.uuid4()
+            raise EnvironmentError(                
+                responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
+                responseCode=500,
+                logEntries=[f"Error key {errorKey}. Wanted to set update check timestamp but it's not a datetime object, but a {type(timestamp).__name__}"]
             )
         
         self.lastCheckedTimestamp = timestamp
@@ -284,7 +267,8 @@ class Repository:
     
     # Normalize repo slug ---------------------------------------------------------------------------------------------------------
     @staticmethod
-    def normalizeRepoSlug(repoSlugToSet):
+    def ensureRepoSlug(repoSlugToSet: str, fromCustomerRequest: bool = False) -> str:
+        # sourcery skip: hoist-similar-statement-from-if, remove-unnecessary-else, swap-nested-ifs
         """Normalize the repository slug.
 
         This static method takes a repository slug as input and performs normalization checks and modifications to ensure it follows the specified URI format.
@@ -300,20 +284,38 @@ class Repository:
             ValueError: If the repo slug is an empty string or does not match the specified URI format.
 
         """
+        
         if not isinstance(repoSlugToSet, str):
-            raise RequestError(
-                responseMessage="The repo slug shall be a string.",
-                responseCode=400,
-                logEntries=[f"Wanted to set a value of {type(repoSlugToSet).__name__} type as repo slug"]                
-            )
+            if fromCustomerRequest: # Wrong data in request, return 400 and inform the caller on what's wrong
+                raise RequestError(
+                    responseMessage="The repo slug shall be a string.",
+                    responseCode=400,
+                    logEntries=[f"Wanted to set a value of {type(repoSlugToSet).__name__} type as repo slug"]                
+                )
+            else: # Wrong data in internal processing, such as when deserializing repository store. 
+                #   Don't blame the user and don't disclose details of internal operations.
+                errorKey = uuid.uuid4()
+                raise EnvironmentError(
+                    responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
+                    responseCode=500,
+                    logEntries=[f"Error key {errorKey}. Wanted to set a value of {type(repoSlugToSet).__name__} type as repo slug."]
+                )
         
-        if len(repoSlugToSet) == 0:
-            raise RequestError(
-                responseMessage="The repo slug shall not be an empty string.",
-                responseCode=400,
-                logEntries=["Wanted to set empty string as repo slug"]                
-            )
-        
+        if not repoSlugToSet:
+            if fromCustomerRequest: # Wrong data in request, return 400 and inform the caller on what's wrong
+                raise RequestError(
+                    responseMessage="The repo slug shall not be an empty string.",
+                    responseCode=400,
+                    logEntries=["Wanted to set empty string as repo slug"]                
+                )
+            else: # Wrong data in internal processing, such as when deserializing repository store. 
+                #   Don't blame the user and don't disclose details of internal operations.
+                errorKey = uuid.uuid4()
+                raise EnvironmentError(
+                    responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
+                    responseCode=500,
+                    logEntries=[f"Error key {errorKey}. Wanted to set empty string as repo slug."]
+                )
         
         # URI (slug) format is: 
         # * shall contain at least one number, letter, dash or slash,
@@ -321,17 +323,26 @@ class Repository:
         # * shall only contain numbers, letters, dashes and slashes,
         # * may end with a slash, but 
         # * no consecutive slashes are allowed
-        if not re.search("^/?[\w\d\-_]+(/[\w\d\-_]+)*/?$", repoSlugToSet):
-            raise RequestError(
-                responseMessage =
-                    "Value specified for repo slug is not a valid URI. Valid URIs " + 
-                    "shall contain at least one number, letter, dash or slash, " + 
-                    "may start with a slash, " + 
-                    "shall only contain numbers, letters, dashes and slashes, " + 
-                    "may end with a slash, but " + 
-                    "no consecutive slashes are allowed.",
-                responseCode=400,
-                logEntries=[f"Invalid repo slug attempted to be set: {repoSlugToSet}"]
+        if not re.search("^/?[\w\d_][\w\d\-_]*(/[\w\d\-_]+)*/?$", repoSlugToSet):
+            if fromCustomerRequest: # Wrong data in request, return 400 and inform the caller on what's wrong
+                raise RequestError(
+                    responseMessage =
+                        "Value specified for repo slug is not a valid URI. Valid URIs " + 
+                        "shall contain at least one number, letter, dash or slash, " + 
+                        "may start with a slash, " + 
+                        "shall only contain numbers, letters, dashes and slashes, " + 
+                        "may end with a slash, but " + 
+                        "no consecutive slashes are allowed.",
+                    responseCode=400,
+                    logEntries=[f"Invalid repo slug attempted to be set: {repoSlugToSet}"]
+                    )
+            else: # Wrong data in internal processing, such as when deserializing repository store. 
+                #   Don't blame the user and don't disclose details of internal operations.
+                errorKey = uuid.uuid4()
+                raise EnvironmentError(
+                    responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
+                    responseCode=500,
+                    logEntries=[f"Error key {errorKey}. Repo slug '{repoSlugToSet}' doesn't conform pattern."]
                 )
         
         # Make sure the property does not begin with a slash
@@ -375,6 +386,7 @@ class RepositoryEncoder(JSONEncoder):
     
     # Encoder function ------------------------------------------------------------------------------------------------------------
     def default(self, o):            
+        # sourcery skip: remove-unnecessary-else, use-fstring-for-concatenation
         """Override the `default` method of `JSONEncoder`.
 
         Args:
@@ -385,9 +397,41 @@ class RepositoryEncoder(JSONEncoder):
 
         """
         if type(o) == datetime:
+            if app is None:
+                errorKey = uuid.uuid4()
+                raise EnvironmentError(
+                    responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
+                    responseCode=500,
+                    logEntries=[f"Error key {errorKey}. Variable 'app' in repository.py is not defined."]
+                )
+            if app.config is None: 
+                errorKey = uuid.uuid4()
+                raise EnvironmentError(
+                    responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
+                    responseCode=500,
+                    logEntries=[f"Error key {errorKey}. The 'app' global variable in repository.py has no 'config' property"]
+                )
+            if "dateTimeFormat" not in app.config.keys():
+                errorKey = uuid.uuid4()
+                raise EnvironmentError(
+                    responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
+                    responseCode=500,
+                    logEntries=[f"Error key {errorKey}. No 'dateTimeFormat' key in 'app.config' in repository.py"]
+                )
+                
             return datetime.strftime(o, app.config["dateTimeFormat"])
-        else:
+        
+        if hasattr(o, "__dict__"):        
             return o.__dict__
+        else:
+            errorKey = uuid.uuid4()
+            raise EnvironmentError(
+                    responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
+                    responseCode=500,
+                    logEntries=[ f"Error key {errorKey}. An object of the type '{type(o).__name__}' is passed to "  
+                                + "RepositoryEncoder, and the encoder cannot encode it."]
+                )
+    
 
 # Decode repository info from JSON ************************************************************************************************
 class RepositoryDecoder(JSONDecoder):
@@ -420,8 +464,14 @@ class RepositoryDecoder(JSONDecoder):
                 releaseUrl=dct["releaseUrl"],
                 repoUrl=dct["repoUrl"]
             )
-        except Exception as err:
-            app.logger.exception(f"Could not decode repo store file for an error of {type(err).__name__}. Details: {err}")
+        except Exception as err:            
+            errorKey = uuid.uuid4()
+            raise EnvironmentError(
+                responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
+                responseCode=500,
+                logEntries=[f"Error key {errorKey} .Could not decode repo store file for an error of {type(err).__name__}. Details: {err}"]
+            ) from err
+            
 
 # Repository store ****************************************************************************************************************
 class RepositoryStore(List[Repository]):
@@ -522,7 +572,7 @@ class RepositoryStoreManager:
         """
         
         # Fix repo slug if necessary
-        repoSlug = Repository.normalizeRepoSlug(repoSlug)
+        repoSlug = Repository.ensureRepoSlug(repoSlug)
         
         # Load repos from store on demand        
         RepositoryStoreManager._loadRepoRepository()
@@ -584,3 +634,4 @@ class UpdateInfo:
         """
         self.repository = repository
         self.updateAvailable = updateAvailable
+
