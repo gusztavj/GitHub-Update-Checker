@@ -60,6 +60,7 @@ import os
 import re
 import requests
 import time
+import uuid
 
 from flask import Flask, jsonify, request, make_response, Response, g
 from flask.logging import default_handler
@@ -68,10 +69,11 @@ from customExceptions import RequestError, EnvironmentError, UpdateCheckingError
 import repository
 from repository import RepositoryAccessManager, Repository, RepositoryStoreManager, UpdateInfo
 
-import importlib
 
+# Init stuff ======================================================================================================================
+dateTimeFormat = "%Y-%m-%d %H:%M:%S"
+"""Date and time format for business data"""
 
-# Preparatory steps ===============================================================================================================
 
 # Convert timestamps to UTC -------------------------------------------------------------------------------------------------------
 class UTCFormatter(logging.Formatter):
@@ -115,21 +117,41 @@ dictConfig(
 )
 """Logging settings"""
 
-# Create app ======================================================================================================================
-app = Flask(__name__)
-"""Flask app"""
+# App factory =====================================================================================================================
+def create_app(test_config=None):
+    # Create and configure the app
+    app = Flask(__name__, instance_relative_config=True)
+    app.config.from_mapping(SECRET_KEY='dev')
 
+    if test_config is None:
+        # Load the instance config, if it exists, when not testing
+        app.config.from_pyfile('config.py', silent=True)
+    else:
+        # Load the test config if passed in
+        app.config.from_mapping(test_config)
+
+    # ensure the instance folder exists
+    with contextlib.suppress(OSError):
+        os.makedirs(app.instance_path)
+        
+    app.logger.removeHandler(default_handler)
+    app.secret_key = "d8ca62a10b0650feb93429bb9eb17a3c968375d6db418b9e"
+    app.logger.setLevel(logging.DEBUG)
+    app.config["repoRepository"] = {}
+    app.config["dateTimeFormat"] = dateTimeFormat
+        
+    # a simple page that says hello
+    @app.route('/hello')
+    def hello():
+        return 'Hello, World!'
+
+    return app
+
+
+
+# Boot up =========================================================================================================================
+app = create_app()
 repository.app = app
-
-dateTimeFormat = "%Y-%m-%d %H:%M:%S"
-"""Date and time format for business data"""
-
-# Init stuff ======================================================================================================================
-app.logger.removeHandler(default_handler)
-app.secret_key = "d8ca62a10b0650feb93429bb9eb17a3c968375d6db418b9e"
-app.logger.setLevel(logging.DEBUG)
-app.config["repoRepository"] = {}
-app.config["dateTimeFormat"] = dateTimeFormat
 
 
 
@@ -182,7 +204,7 @@ def checkUpdates():
                 innerException=error) from error
 
         # Validate request --------------------------------------------------------------------------------------------------------
-        
+
         forceUpdateCheck, repoSlug, clientCurrentVersion = _parseRequest(requestJson)
 
         # Load cached repository info if exist in repository store ----------------------------------------------------------------
@@ -206,31 +228,41 @@ def checkUpdates():
 
                     # Do not flood the repo API, use cached info
                     return make_response(jsonify(updateInfo), 200)
-                
+
         else: # turn forcing check off to prevent accidental flooding                
             forceUpdateCheck = False
 
         # Submit request ----------------------------------------------------------------------------------------------------------
         repoConn = RepositoryAccessManager(repoSlug=updateInfo.repository.getRepoSlug())
-        response, updateInfo = _getUpdateInfoFromGitHub(repoConn, updateInfo)                
+        
+        # Submit request to GitHub. If it fails, we'll continue working with cached data
+        try:
+            response = _getUpdateInfoFromGitHub(repoConn)
+        
+            # Populate info from response
+            _populateUpdateInfoFromGitHubResponse(response, updateInfo, repoConn) 
 
-        # Being here means a response has been received successfully
-
-        # Populate info from response
-        _populateUpdateInfoFromGitHubResponse(response, updateInfo, repoConn) 
-
-        app.logger.debug(f"Update info received from GitHub: {updateInfo}")
-
+            app.logger.debug(f"Update info received from GitHub: {updateInfo}")
+            
+        except UpdateCheckingError as err:
+            if hasattr(err, "apiLimitResetsAt"): 
+                # Rate limit exceeded, set last check timestamp to the future after ban expiry
+                # to make sure to not flood GitHub till that
+                updateInfo.repository.lastCheckedTimestamp = err.apiLimitResetsAt - timedelta(days=updateInfo.repository.getCheckFrequencyDays())                
+            elif len(updateInfo.repository.latestVersion) == 0:
+                # We could not make request and has no cached info on the repo, so let's fail here
+                raise err
+        
         # See if there is an update and set current version in response
-        updateInfo.updateAvailable = _isUpdateAvailable(updateInfo, clientCurrentVersion)
+        updateInfo.updateAvailable = _isUpdateAvailable(updateInfo, clientCurrentVersion)        
 
         # Store info --------------------------------------------------------------------------------------------------------------
 
         # Check if the repo is registered (even if it was not at the beginning, since a parallel request
         # might have resulted in adding it) and add the repo to the store if it's still not there
-        if not [repo for repo in RepositoryStoreManager.repos if repo.getRepoSlug() == updateInfo.repository.getRepoSlug()]:
+        if not [repo for repo in RepositoryStoreManager.repoStore if repo.getRepoSlug() == updateInfo.repository.getRepoSlug()]:
             # Add the repo info created right before
-            RepositoryStoreManager.repos.append(updateInfo.repository)
+            RepositoryStoreManager.repoStore.append(updateInfo.repository)
 
         # By reaching this point, at least the last check's timestamp has been updated, so let's save it
         # to the repo store file for later use when the app is restarted for some reason
@@ -241,23 +273,32 @@ def checkUpdates():
 
 
     except (EnvironmentError, RequestError, UpdateCheckingError) as err:
-        app.logger.error(f"{type(err).__name__} occurred")        
-        # Log additional message(s)        
-        [app.logger.error(f"\t{line}") for line in err.logEntries]
-        if err.innerException is not None:
-            app.logger.debug(f"Error details: {'-' * 40}")
-            app.logger.debug(f"{err.innerException}")
-            app.logger.debug("-" * 50)
-        app.logger.info(f"Information returned: HTTP {err.responseCode}: {err.responseMessage}")
-
+        # Try to log but don't make more trouble if the root of the problem is a failure in logging
+        with contextlib.suppress(Exception):
+            app.logger.error(f"{type(err).__name__} occurred")
+            
+            # Log additional message(s)        
+            [app.logger.error(f"\t{line}") for line in err.logEntries]
+            if err.innerException is not None:
+                app.logger.debug(f"Error details: {'-' * 40}")
+                app.logger.debug(f"{err.innerException}")
+                app.logger.debug("-" * 50)
+            app.logger.info(f"Information returned: HTTP {err.responseCode}: {err.responseMessage}")
+            
         response = err.response()
 
     except Exception as err:
         whatHappened = f"An unexpected exception of {type(err).__name__} occurred."
-        app.logger.exception(f"{whatHappened}")
-        app.logger.debug(f"Details: {err}")
-        responseJson = {"error": whatHappened}
-        response = make_response(jsonify(responseJson), 500)
+        
+        # Try to log but don't make more trouble if the root of the problem is a failure in logging
+        with contextlib.suppress(Exception):
+            errorKey = uuid.uuid4()
+            
+            app.logger.exception(f"Error key {errorKey}. An {type(err).__name__} exception has been thrown.")
+            app.logger.debug(f"Details: {err}")
+                        
+            responseJson = {"error": f"An internal error occurred. Mention the following error key when requesting support: {errorKey}"}
+            response = make_response(jsonify(responseJson), 500)
     finally:
         pass
 
@@ -286,7 +327,8 @@ def _populateUpdateInfoFromGitHubResponse(response: Response, updateInfo: Update
 
 
 # Submit request to GitHub ========================================================================================================
-def _getUpdateInfoFromGitHub(repoConn: RepositoryAccessManager, updateInfo: UpdateInfo) -> tuple[Response, UpdateInfo]:
+def _getUpdateInfoFromGitHub(repoConn: RepositoryAccessManager) -> Response:
+    # sourcery skip: extract-method
     """Get update information from GitHub.
 
     Args:
@@ -303,24 +345,33 @@ def _getUpdateInfoFromGitHub(repoConn: RepositoryAccessManager, updateInfo: Upda
     
     timeout = 5
     try:                
-        with requests.get(repoConn.repoReleaseApiUrl(), timeout=timeout, auth=(repoConn.username, repoConn.token())) as response:
-            pass  # Process the response here as needed
+        response = requests.get(repoConn.repoReleaseApiUrl(), timeout=timeout, auth=(repoConn.username, repoConn.token()))
+        
     except requests.exceptions.Timeout as tex:
-        # Timeout when checking GitHub
-        app.logger.warning(f"Version checking timed out for {updateInfo.repository.getRepoSlug()}")
-
-            # Don't bother the user, just return that there's no update
-        updateInfo.updateAvailable = False
+        whatHappened = f"Request to {repoConn.repoReleaseApiUrl()} timed out after {timeout} seconds"
 
         raise UpdateCheckingError(
-                responseMessage = "Request to GitHub timed out.", 
-                responseCode = 500,
-                logEntries = [f"Request to {repoConn.repoReleaseApiUrl()} timed out after {timeout} seconds"],
-                innerException = None
-                ) from tex  
+            responseMessage = "", 
+            responseCode = 200,
+            logEntries = [whatHappened, "Details:", json.dumps(response.json())],
+            innerException = None
+            ) from tex
+        
+    except Exception as ex: 
+        whatHappened = f"Unexpected error of {type(ex).__name} occurred. Exception: {ex}"
+
+        raise UpdateCheckingError(
+            responseMessage = "", 
+            responseCode = 200,
+            logEntries = [whatHappened, "Response:", json.dumps(response.json())],
+            innerException = None
+            ) from ex
 
     # For errors, enable raising exceptions
     if response.status_code != 200:
+        
+        err = UpdateCheckingError(responseMessage="", responseCode="", logEntries=[], innerException=None)
+        
         responseCode = 500
         whatHappened = ""
         match response.status_code:
@@ -335,8 +386,7 @@ def _getUpdateInfoFromGitHub(repoConn: RepositoryAccessManager, updateInfo: Upda
                 apiLimitResetsAt = datetime.fromtimestamp(
                     int(response.headers["x-ratelimit-reset"])
                 )
-
-                updateInfo.repository.setLastCheckedTimestamp(apiLimitResetsAt - timedelta(days=updateInfo.repository.getCheckFrequencyDays()))
+                err.apiLimitResetsAt = apiLimitResetsAt
                 whatHappened = f"API limit exceeded, and will be reset at {apiLimitResetsAt}. Next non-forced check will be made afterwards only."
             case 404:
                 whatHappened = "GitHub returned with HTTP 404. The repo URL specified in the request does not exist. Unknown repo specified?"
@@ -345,14 +395,14 @@ def _getUpdateInfoFromGitHub(repoConn: RepositoryAccessManager, updateInfo: Upda
                 whatHappened = "An error occurred in GitHub Update Checker or on GitHub while checking for updates."
                 responseCode = 500
 
-        raise UpdateCheckingError(
-                responseMessage = whatHappened, 
-                responseCode = responseCode,
-                logEntries = [whatHappened, "Details:", json.dumps(response.json())],
-                innerException = None
-                )
+        
+        err.responseMessage = whatHappened
+        err.responseCode = responseCode
+        err.logEntries = [whatHappened, "Details:", json.dumps(response.json())]
+        err.innerException = None
+        raise err
 
-    return response, updateInfo
+    return response
 
 # Parse request body received from user ===========================================================================================
 def _parseRequest(requestJson) -> tuple[bool, str, str]:
@@ -381,8 +431,16 @@ def _parseRequest(requestJson) -> tuple[bool, str, str]:
                     responseMessage=whatHappened,
                     logEntries=[whatHappened],
                     innerException=None)
-        if "currentVersion" in appInfoJson.keys():
+        if "currentVersion" in appInfoJson.keys():           
             clientCurrentVersion = appInfoJson["currentVersion"]
+            
+            if len(clientCurrentVersion) == 0:
+                whatHappened = "The 'currentVersion' key is set to an empty string. A valid version number is expected."
+                raise RequestError(
+                    responseCode=400,
+                    responseMessage=whatHappened,
+                    logEntries=[whatHappened],
+                    innerException=None)
 
             app.logger.info(f"Current version in request: {clientCurrentVersion}")
         else:
@@ -404,12 +462,11 @@ def _parseRequest(requestJson) -> tuple[bool, str, str]:
     if "forceUpdateCheck" in requestJson.keys():
         try:
             if isinstance(requestJson['forceUpdateCheck'], bool):
-                    # Only process if it's bool
+                # Only process if it's bool
                 forceUpdateCheck = bool(requestJson['forceUpdateCheck'])
             else:
-                    # For all other values make it false to stay on the safe side
-                forceUpdateCheck = False
-
+                # Try to parse string value, or fall back to false to stay on the safe side
+                forceUpdateCheck = str.lower(requestJson['forceUpdateCheck']) == 'true'
             app.logger.info(f"Update check forced in request: {forceUpdateCheck}")
         except ValueError as ve:
             whatHappened = f"Could not convert the value of forceUpdateCheck to bool. Details: {ve}"
@@ -432,10 +489,23 @@ def _isUpdateAvailable(updateInfo: UpdateInfo, currentVersion: str) -> bool:
         # Parse into a list
         latestVersionTags = [int(t) for t in latestVersionCleaned.split(".")]
     except Exception as err:
+        whatHappened: str
+        
+        if updateInfo is None:
+            whatHappened = "The updateInfo argument was set to None"
+        elif not hasattr(updateInfo, "repository"):
+            whatHappened = "The object passed in updateInfo has no repository property"
+        elif updateInfo.repository is None:
+            whatHappened = "The repository property of the object passed in updateInfo is set to None"
+        elif not hasattr(updateInfo.repository, "latestVersion"):
+            whatHappened = "The repository property of the object passed in updateInfo has no latestVersion property"
+        else:
+            whatHappened = f"Invalid version number in GitHub's response: {updateInfo.repository.latestVersion}"
+            
         raise UpdateCheckingError(
-            responseMessage="Invalid response received from GitHub. Can't tell latest version number.",
+            responseMessage="For an internal error, can't tell latest version number.",
             responseCode=500,
-            logEntries=[f"Invalid version number in GitHub's response: {updateInfo.repository.latestVersion}"],
+            logEntries=[whatHappened],
             innerException=err                
         ) from err
 
@@ -449,18 +519,29 @@ def _isUpdateAvailable(updateInfo: UpdateInfo, currentVersion: str) -> bool:
 
         if latestVersionTags[0] > currentVersionTags[0]:
             updateAvailable = True
-        elif latestVersionTags[1] > currentVersionTags[1]:
+
+        # Minor comparison only applies if majors are the same            
+        elif latestVersionTags[0] == currentVersionTags[0] \
+            and latestVersionTags[1] > currentVersionTags[1]:
+                
             updateAvailable = True
-        elif len(currentVersionTags) > 2 and latestVersionTags[2] > currentVersionTags[2]:
+        
+        # Patch comparison only applies if majors and minors are the same
+        elif latestVersionTags[0] == currentVersionTags[0] \
+            and latestVersionTags[1] == currentVersionTags[1] \
+            and len(currentVersionTags) > 2 \
+            and latestVersionTags[2] > currentVersionTags[2]:
+            
             updateAvailable = True
 
         app.logger.debug(f"New version available: {updateInfo.updateAvailable}")
 
     except Exception as err:
+        whatHappened = f"Invalid version number in request: {currentVersion}" if currentVersion else "None was passed in the currentVersion argument of _isUpdateAvailable"
         raise RequestError(
             responseMessage="Invalid version in 'currentVersion' of 'AppInfo'. Version shall be specified as (x, y, z).",
             responseCode=400,
-            logEntries=[f"Invalid version number in request: {currentVersion}"],
+            logEntries=[whatHappened],
             innerException=err                
         ) from err
 

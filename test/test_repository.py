@@ -9,7 +9,6 @@ import pytest
 import repository
 from repository import *
 
-import gitHubUpdateChecker
 from gitHubUpdateChecker import *
 
 import customExceptions
@@ -179,7 +178,7 @@ class TestRepositoryEncoder:
 class TestRepositoryDecoder:
     
     # Decodes a valid dictionary into a Repository object with a mocked 'app' object.
-    def test_valid_dictionary_decoding_with_mocked_app(self, mocker):
+    def test_valid_dictionary_decoding_with_mocked_app(self):
         repo_dict = {
             "repoSlug": "my-repo",
             "checkFrequencyDays": 7,
@@ -191,13 +190,9 @@ class TestRepositoryDecoder:
         }
 
         # Mock the 'app' object and its attributes
-        app_mock = mocker.Mock()
-        app_mock.config = {"dateTimeFormat": "%Y-%m-%d %H:%M:%S"}
-        app_mock.logger = mocker.Mock()
-
-        # Set the mocked 'app' object as the global 'app'
-        global app
-        app = app_mock
+        app = Flask(__name__)
+        app.config = {"dateTimeFormat": "%Y-%m-%d %H:%M:%S"}
+        
 
         repo = RepositoryDecoder.decode(repo_dict)
 
@@ -206,7 +201,7 @@ class TestRepositoryDecoder:
         assert repo.checkFrequencyDays == 7
         assert repo.latestVersion == "1.0.0"
         assert repo.latestVersionName == "First Release"
-        assert repo.lastCheckedTimestamp == datetime(2022, 1, 1, 0, 0, 0)
+        assert repo.lastCheckedTimestamp == datetime.strptime(repo_dict["lastCheckedTimestamp"], app.config["dateTimeFormat"])
         assert repo.releaseUrl == "https://github.com/my-repo/releases/latest"
         assert repo.repoUrl == "https://github.com/my-repo"
     
@@ -218,7 +213,7 @@ class TestRepositoryDecoder:
             "checkFrequencyDays": 7,
             "latestVersion": "1.0.0",
             "latestVersionName": "Release 1.0.0",
-            "lastCheckedTimestamp": "2022-01-01T00:00:00",
+            "lastCheckedTimestamp": "2022-01-01 00:00:00",
             "releaseUrl": "https://github.com/my-repo/releases/tag/1.0.0",
             "repoUrl": "https://github.com/my-repo"
         }
@@ -227,3 +222,118 @@ class TestRepositoryDecoder:
         with pytest.raises(EnvironmentError):
             RepositoryDecoder.decode(repo_dict)
                 
+                
+class TestRepositoryStore:
+    
+    # Cannot add an object that is not a Repository to the RepositoryStore
+    def test_cannot_add_non_repository_object(self):
+        repoStore = RepositoryStore()
+        with pytest.raises(EnvironmentError):
+            repoStore.append("not a repository")
+        assert len(repoStore) == 0
+        
+        
+
+class TestRepositoryStoreManager:
+
+    # Populating the repository store from the repository repository with valid data should result in the 'RepositoryStoreManager.repos' property being populated with 'Repository' objects.
+    def test_populate_repository_store_with_valid_data(self):
+        # Initialize Flask app
+        app = Flask(__name__)
+
+        # Set app configuration
+        app.config["dateTimeFormat"] = "%Y-%m-%d %H:%M:%S"
+        app.config["repoRepository"] = [
+                {
+                    "repoSlug": "user/repo1",
+                    "checkFrequencyDays": 7,
+                    "latestVersion": "1.0.0",
+                    "latestVersionName": "Release 1.0.0",
+                    "lastCheckedTimestamp": "2022-01-01 12:00:00",
+                    "releaseUrl": "https://github.com/user/repo1/releases/latest",
+                    "repoUrl": "https://github.com/user/repo1"
+                },
+                {
+                    "repoSlug": "user/repo2",
+                    "checkFrequencyDays": 3,
+                    "latestVersion": "2.0.0",
+                    "latestVersionName": "Release 2.0.0",
+                    "lastCheckedTimestamp": "2022-01-01 12:00:00",
+                    "releaseUrl": "https://github.com/user/repo2/releases/latest",
+                    "repoUrl": "https://github.com/user/repo2"
+                }
+        ]
+            
+
+        # Set app reference in Repository class
+        repository.app = app
+
+        # Load serialized repo store
+        RepositoryStoreManager._populateRepositoryStore()
+
+        # Assert that the repository store is populated with Repository objects
+        assert isinstance(RepositoryStoreManager.repoStore, RepositoryStore)
+        assert all(isinstance(repo, Repository) for repo in RepositoryStoreManager.repoStore)
+
+    # Populating the repository store from the repository repository with invalid data should result in the 'RepositoryStoreManager.repos' property being empty.
+    def test_populate_repository_store_with_invalid_data(self):
+        # Initialize Flask app
+        app = Flask(__name__)
+
+        # Set app configuration with invalid data
+        app.config["dateTimeFormat"] = "%Y-%m-%d %H:%M:%S"
+        app.config["repoRepository"] = [
+                {
+                    "repoSlug": "user/repo1",
+                    "checkFrequencyDays": 7,
+                    "latestVersion": "1.0.0",
+                    "latestVersionName": "Release 1.0.0",
+                    "lastCheckedTimestamp": "2022-01-01 12:00:00",
+                    "releaseUrl": "https://github.com/user/repo1/releases/latest",
+                    "repoUrl": "https://github.com/user/repo1"
+                },
+                {
+                    "repoSlug": "user/repo2",
+                    "checkFrequencyDays": 3,
+                    "latestVersion": "2.0.0",
+                    "latestVersionName": "Release 2.0.0",
+                    "lastCheckedTimestamp": "2022-01-01 12:00:00",
+                    "releaseUrl": "https://github.com/user/repo2/releases/latest",
+                    "repoUrl": "https://github.com/user/repo2"
+                },
+                {
+                    "repoSlug": "user/repo3",
+                    "checkFrequencyDays": "invalid",
+                    "latestVersion": "3.0.0",
+                    "latestVersionName": "Release 3.0.0",
+                    "lastCheckedTimestamp": "2022-01-01 12:00:00",
+                    "releaseUrl": "https://github.com/user/repo3/releases/latest",
+                    "repoUrl": "https://github.com/user/repo3"
+                }
+        ]
+
+
+        # Set app reference in Repository class
+        repository.app = app
+
+        with pytest.raises(EnvironmentError) as err:
+            # Load serialized repo store
+            RepositoryStoreManager._populateRepositoryStore()
+
+            # Assert the proper exception is thrown
+            assert any(
+                True
+                for tb in err._traceback
+                if "Could not decode repo store file for an error of" in str(tb)
+            )
+                
+
+        # Assert that the repository store is empty
+        assert len(RepositoryStoreManager.repoStore) == 0
+        
+class TestUpdateInfo:
+    # Create an instance of UpdateInfo with default values.
+    def test_default_values(self):
+        update_info = UpdateInfo()
+        assert update_info.repository is None
+        assert update_info.updateAvailable is False

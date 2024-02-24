@@ -469,13 +469,23 @@ class RepositoryDecoder(JSONDecoder):
             raise EnvironmentError(
                 responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
                 responseCode=500,
-                logEntries=[f"Error key {errorKey} .Could not decode repo store file for an error of {type(err).__name__}. Details: {err}"]
+                logEntries=[f"Error key {errorKey}. Could not decode repo store file for an error of {type(err).__name__}. Details: {err}"]
             ) from err
             
 
 # Repository store ****************************************************************************************************************
-class RepositoryStore(List[Repository]):
+class RepositoryStore(List[Repository]):    
     """RepositoryStore class for storing a list of `Repository` objects. This class extends the built-in `List` class."""
+    
+    def append(self, item: Repository) -> None:
+        if not isinstance(item, Repository):
+            errorKey = uuid.uuid4()
+            raise EnvironmentError(
+                responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
+                responseCode=500,
+                logEntries=[f"Only instances of the 'Repository' class can be added to the store, but an item of {type(item).__name__} was attempted to be added."]
+            )
+        super().append(item)
     pass
         
 # Repository store manager ********************************************************************************************************
@@ -495,7 +505,8 @@ class RepositoryStoreManager:
     
     
     # Public properties ===========================================================================================================
-    repos: RepositoryStore = RepositoryStore()
+    repoStore: RepositoryStore = RepositoryStore()
+    """The managed repository store."""
         
     # Private functions ===========================================================================================================
 
@@ -512,20 +523,25 @@ class RepositoryStoreManager:
             None
 
         """
-        RepositoryStoreManager.repos = RepositoryStore()
+        RepositoryStoreManager.repoStore = RepositoryStore()
         repoDict = app.config[RepositoryStoreManager._repoRepositoryKey]
+
+        stagingRepoStore: RepositoryStore = RepositoryStore()
 
         for encodedRepo in repoDict:            
             repo = RepositoryDecoder.decode(encodedRepo)
             if repo is not None:
-                RepositoryStoreManager.repos.append(repo)
+                stagingRepoStore.append(repo)
+            
+        # Getting here means no exception has been thrown, so it's safe to finalize the staging container
+        RepositoryStoreManager.repoStore = stagingRepoStore
             
     # Load repository of known GitHub repositories --------------------------------------------------------------------------------
     @staticmethod
     def _loadRepoRepository() -> RepositoryStore:
         """Load repository of known GitHub repositories and populate into app.config["repoRepository"]"""
         
-        if RepositoryStoreManager.repos is not None and len(RepositoryStoreManager.repos) > 0:
+        if RepositoryStoreManager.repoStore is not None and len(RepositoryStoreManager.repoStore) > 0:
             # Already loaded
             return
         
@@ -553,7 +569,7 @@ class RepositoryStoreManager:
         
         RepositoryStoreManager._populateRepositoryStore()
         
-        return RepositoryStoreManager.repos
+        return RepositoryStoreManager.repoStore
     
     
     # Public functions ============================================================================================================
@@ -579,9 +595,9 @@ class RepositoryStoreManager:
 
         updateInfo: UpdateInfo = UpdateInfo()
 
-        if RepositoryStoreManager.repos is not None and len(RepositoryStoreManager.repos) > 0: # the store is not empty
+        if RepositoryStoreManager.repoStore is not None and len(RepositoryStoreManager.repoStore) > 0: # the store is not empty
             # Load cached info
-            for repo in RepositoryStoreManager.repos:
+            for repo in RepositoryStoreManager.repoStore:
                 if repo.getRepoSlug() == repoSlug: # this is it
                     updateInfo.repository = repo
                     break # found it, need no more loops
@@ -601,7 +617,7 @@ class RepositoryStoreManager:
         
         try:
             with open(RepositoryStoreManager._repoStore, "w") as f:
-                f.write(json.dumps(RepositoryStoreManager.repos, cls=RepositoryEncoder, indent=4))
+                f.write(json.dumps(RepositoryStoreManager.repoStore, cls=RepositoryEncoder, indent=4))
         except Exception as ex:
             app.logger.error(f"Could not save repo repository '{RepositoryStoreManager._repoStore}' for an error of {type(ex).__name__}: {ex}")
             
