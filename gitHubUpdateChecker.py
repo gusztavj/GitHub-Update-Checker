@@ -484,7 +484,7 @@ def _isUpdateAvailable(updateInfo: UpdateInfo, currentVersion: str) -> bool:
     
     try:        
         # Trim leading v and eventual trailing qualifiers such as -alpha
-        latestVersionCleaned = re.match("[v]((\d+\.)*(\d+)).*", updateInfo.repository.latestVersion)[1]
+        latestVersionCleaned = re.match("v?((\d+\.)*(\d+)).*", updateInfo.repository.latestVersion)[1]
 
         # Parse into a list
         latestVersionTags = [int(t) for t in latestVersionCleaned.split(".")]
@@ -499,6 +499,8 @@ def _isUpdateAvailable(updateInfo: UpdateInfo, currentVersion: str) -> bool:
             whatHappened = "The repository property of the object passed in updateInfo is set to None"
         elif not hasattr(updateInfo.repository, "latestVersion"):
             whatHappened = "The repository property of the object passed in updateInfo has no latestVersion property"
+        elif len(updateInfo.repository.latestVersion) == 0:
+            whatHappened = "The latestVersion property in updateInfo is an empty string"
         else:
             whatHappened = f"Invalid version number in GitHub's response: {updateInfo.repository.latestVersion}"
             

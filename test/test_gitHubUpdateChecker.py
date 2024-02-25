@@ -5,29 +5,24 @@ from flask import current_app, Flask
 import flask
 
 from repository import UpdateInfo, Repository, RepositoryAccessManager
-from gitHubUpdateChecker import checkUpdates, create_app, _parseRequest, _isUpdateAvailable, _getUpdateInfoFromGitHub
+from gitHubUpdateChecker import checkUpdates, create_app, _parseRequest, _isUpdateAvailable, _getUpdateInfoFromGitHub, checkUpdates
     
 import gitHubUpdateChecker
 
 import customExceptions
 from customExceptions import UpdateCheckingError, EnvironmentError, RequestError, StructuredErrorInfo
 
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, MagicMock, patch
 from requests.models import Response
 
-
-# Dependencies:
-# pip install pytest-mock
 import pytest
-import pytest_flask
-import pytest_mock
 import json
 import time
-import requests
 
-app = create_app()
 
-flask.current_app = app
+
+
+flask.current_app = create_app()
 
 @pytest.fixture()
 def app():
@@ -55,7 +50,10 @@ def runner(app):
 
 # Tests for the getUpdateInfo method ##############################################################################################
 class Test_GetUpdateInfo:
-    # Function receives a valid POST request with JSON body containing forceUpdateCheck, repoSlug, and clientCurrentVersion fields. The request is logged.
+    
+    #==============================================================================================================================
+    # Function receives a valid POST request with JSON body containing forceUpdateCheck, repoSlug, and clientCurrentVersion fields. 
+    # The request is logged.
     def test_valid_post_request(self, client):
         """
         Submit a single request with non-forced updates to quickly see if the
@@ -85,6 +83,7 @@ class Test_GetUpdateInfo:
         assert response.json["repository"]["repoSlug"] == requestBody["AppInfo"]["repoSlug"]
 
 
+    #==============================================================================================================================
     # Perform a force-unforced-forced check to see if both work
     def test_forcing_flag(self, client):
         """
@@ -159,8 +158,9 @@ class Test_GetUpdateInfo:
         assert unForcedCheckTimestamp != secondForcedCheckTimestamp
 
 
+    #==============================================================================================================================
     # Check if correct exception is raised when function fails to initialize logger.
-    def test_failed_logger_initialization_exception(self, app, mocker):
+    def test_failed_logger_initialization_exception(self, mocker):
         """
         Checks if the correct exception is raised when the function fails to initialize 
         the logger.
@@ -173,13 +173,6 @@ class Test_GetUpdateInfo:
             None
 
         """
-        # Mock the necessary dependencies
-        
-        mocker.patch('flask.request')
-        mocker.patch('flask.make_response')
-        mocker.patch('EnvironmentError')
-        mocker.patch('StructuredErrorInfo.response')
-        logger_mock = mocker.patch('gitHubUpdateChecker.app.logger.info', side_effect=Exception)
         
         # Set up the mock objects
         request_json = {
@@ -187,21 +180,27 @@ class Test_GetUpdateInfo:
             'repoSlug': 'test_repo',
             'clientCurrentVersion': '1.0'
         }
-        
-        flask.request.json = request_json
-        
-        # Perform the call
-        checkUpdates()
-        
-        # Check if the exception mocked has been raised
-        logger_mock.assert_called()
-        
-        # Assert that the response is correct and the proper exception has been thrown
-        StructuredErrorInfo.response.assert_called_once()
+            
+        # Mock the necessary dependencies
+        with gitHubUpdateChecker.app.test_request_context(json=request_json):
+            mocker.patch('flask.request')            
+            mocker.patch('flask.make_response')
+            mocker.patch('customExceptions.EnvironmentError')
+            mocker.patch('customExceptions.StructuredErrorInfo.response')
+            logger_mock = mocker.patch('gitHubUpdateChecker.app.logger.info', side_effect=Exception)
+            
+            # Perform the call
+            checkUpdates()
+            
+            # Check if the exception mocked has been raised
+            logger_mock.assert_called()
+            
+            # Assert that the response is correct and the proper exception has been thrown
+            StructuredErrorInfo.response.assert_called_once()
         
         
 
-            
+    #==============================================================================================================================        
     # Perform a force-unforced-forced check to see if both work
     def test_failed_logger_initialization_response(self, client, mocker):
         """
@@ -563,6 +562,7 @@ class Test_parseRequest:
         assert expected[2] in err.value.responseMessage
             
 
+# Tests for the _getUpdateInfoFromGitHub method ###################################################################################
 class Test_getUpdateInfoFromGitHub:
     
     # Mock objects and helper functions ===========================================================================================
@@ -640,117 +640,132 @@ class Test_getUpdateInfoFromGitHub:
                 response = _getUpdateInfoFromGitHub(repoConn)            
                 assert response == mock_response
 
+# Tests for the _checkUpdates method ##############################################################################################
+class Test_checkUpdates:
 
-import pytest
-from gitHubUpdateChecker import app, checkUpdates
-from unittest.mock import patch, MagicMock
-from werkzeug.exceptions import HTTPException
-from customExceptions import RequestError, EnvironmentError, UpdateCheckingError
-from repository import Repository, UpdateInfo
+    # Init common stuff ===========================================================================================================
+    app = create_app()
 
-# Constants for test cases
-VALID_REPO_SLUG = "valid/repo"
-INVALID_REPO_SLUG = "invalid/repo"
-CLIENT_CURRENT_VERSION = "1.0.0"
-NEW_VERSION = "1.1.0"
-OLD_VERSION = "0.9.0"
+    # Constants for test cases
+    VALID_REPO_SLUG = "valid/repo"
+    INVALID_REPO_SLUG = "invalid/repo"
+    CLIENT_SAME_VERSION = "(1,0,0)"
+    CLIENT_NEWER_VERSION = "(1,1,0)"
+    CLIENT_OLDER_VERSION = "(0,9,0)"
+    GITHUB_LATEST_VERSION = "v1.0.0"
 
-# Test data for happy path
-happy_path_data = [
-    ("HP-01", True, VALID_REPO_SLUG, CLIENT_CURRENT_VERSION, NEW_VERSION, False),
-    ("HP-02", False, VALID_REPO_SLUG, CLIENT_CURRENT_VERSION, CLIENT_CURRENT_VERSION, True),
-    ("HP-03", False, VALID_REPO_SLUG, OLD_VERSION, NEW_VERSION, True),
-]
 
-# Test data for edge cases
-edge_cases_data = [
-    ("EC-01", True, VALID_REPO_SLUG, CLIENT_CURRENT_VERSION, "", True),  # No version info available
-    ("EC-02", False, VALID_REPO_SLUG, CLIENT_CURRENT_VERSION, NEW_VERSION, False),  # Cache not expired
-]
+    #==============================================================================================================================
+    # Data and test for happy path
+    @pytest.mark.parametrize("test_id, force_update_check, repo_slug, client_version, latest_version, cache_expired, update_expected", 
+    [
+        ("HP-01", True, VALID_REPO_SLUG, CLIENT_SAME_VERSION, GITHUB_LATEST_VERSION, False, False),
+        ("HP-02", False, VALID_REPO_SLUG, CLIENT_NEWER_VERSION, GITHUB_LATEST_VERSION, True, False),
+        ("HP-03", False, VALID_REPO_SLUG, CLIENT_OLDER_VERSION, GITHUB_LATEST_VERSION, True, True)
+    ])
+    def test_check_updates_happy_path(self, test_id, force_update_check, repo_slug, client_version, latest_version, cache_expired, update_expected):
+        # Arrange
+        with gitHubUpdateChecker.app.test_request_context(json={'forceUpdateCheck': force_update_check, 'AppInfo': {'repoSlug': repo_slug, 'currentVersion': client_version}}):
+            with patch('repository.RepositoryStoreManager.getUpdateInfoFromRepoRepository') as mock_get_update_info:
+                update_info = UpdateInfo(Repository(repo_slug))
+                update_info.repository.latestVersion = latest_version
+                mock_get_update_info.return_value = update_info
 
-# Test data for error cases
-error_cases_data = [
-    ("ERR-01", False, INVALID_REPO_SLUG, CLIENT_CURRENT_VERSION, NEW_VERSION, RequestError, 400, "Request error"),
-    ("ERR-02", False, VALID_REPO_SLUG, CLIENT_CURRENT_VERSION, NEW_VERSION, EnvironmentError, 500, "Environment error"),
-    ("ERR-03", False, VALID_REPO_SLUG, CLIENT_CURRENT_VERSION, NEW_VERSION, UpdateCheckingError, 500, "Update checking error"),
-    ("ERR-04", False, VALID_REPO_SLUG, CLIENT_CURRENT_VERSION, NEW_VERSION, Exception, 500, "An internal error occurred. Mention the following error key when requesting support"),
-]
+                with patch('repository.RepositoryAccessManager') as mock_repo_access_manager:
+                    mock_repo_access_manager.return_value.getRepoSlug.return_value = repo_slug
 
-@pytest.mark.parametrize("test_id, force_update_check, repo_slug, client_version, latest_version, raised_exception, expected_status_code, exception_message", error_cases_data)
-def test_check_updates_error_cases(test_id, force_update_check, repo_slug, client_version, latest_version, raised_exception, expected_status_code, exception_message):
-    """Expect the method to never fail but instead return a response referring to the nature of the error.
-    """
-    # Arrange
-    with app.test_request_context(json={'forceUpdateCheck': force_update_check, 'AppInfo': {'repoSlug': repo_slug, 'currentVersion': client_version}}):
-        with patch('repository.RepositoryStoreManager.getUpdateInfoFromRepoRepository') as mock_get_update_info:
-            update_info = UpdateInfo(Repository(repo_slug))
-            update_info.repository.latestVersion = latest_version
-            mock_get_update_info.return_value = update_info
+                    with patch('repository.RepositoryStoreManager.saveRepoRepository') as mock_save_repo_repository:
+                        mock_save_repo_repository.return_value = None
 
-            with patch('gitHubUpdateChecker._parseRequest') as mock_parse_request:
+                        with patch('gitHubUpdateChecker._getUpdateInfoFromGitHub') as mock_get_update_info_from_github:
+                            mock_get_update_info_from_github.return_value = MagicMock()
 
-                mock_parse_request.side_effect = raised_exception(exception_message, expected_status_code, [], None)
+                            with patch('gitHubUpdateChecker._populateUpdateInfoFromGitHubResponse') as mock_populate_update_info:
+                                mock_populate_update_info.return_value = None
 
-                # Act
-                
-                response = checkUpdates()
+                                # Act
+                                response = checkUpdates()
 
-                # Assert
-                assert response.status_code == expected_status_code
-                assert exception_message in response.get_json()["error"]
+                                # Assert
+                                assert response.status_code == 200
+                                assert response.json['updateAvailable'] == update_expected
 
-@pytest.mark.parametrize("test_id, force_update_check, repo_slug, client_version, latest_version, cache_expired", happy_path_data)
-def test_check_updates_happy_path(test_id, force_update_check, repo_slug, client_version, latest_version, cache_expired):
-    # Arrange
-    with app.test_request_context(json={'forceUpdateCheck': force_update_check, 'AppInfo': {'repoSlug': repo_slug, 'currentVersion': client_version}}):
-        with patch('repository.RepositoryStoreManager.getUpdateInfoFromRepoRepository') as mock_get_update_info:
-            update_info = UpdateInfo(Repository(repo_slug))
-            update_info.repository.latestVersion = latest_version
-            mock_get_update_info.return_value = update_info
+    #==============================================================================================================================                            
+    # Data and test for edge cases
+    @pytest.mark.parametrize("test_id, force_update_check, repo_slug, client_version, latest_version, cache_expired, update_expected, expected_exception, expected_status_code, expected_message", 
+    [
+        ("EC-01", True, VALID_REPO_SLUG, CLIENT_SAME_VERSION, "", False, False, UpdateCheckingError, 500, "For an internal error, can't tell latest version number."),  # No version info available
+        ("EC-02", False, VALID_REPO_SLUG, CLIENT_SAME_VERSION, GITHUB_LATEST_VERSION, True, False, None, 200, ""),   # Cache expired
+        ("EC-03", False, VALID_REPO_SLUG, CLIENT_SAME_VERSION, GITHUB_LATEST_VERSION, False, False, None, 200, ""),  # Cache not expired
+        ("EC-04", False, VALID_REPO_SLUG, CLIENT_OLDER_VERSION, GITHUB_LATEST_VERSION, True, True, None, 200, ""),   # Cache expired
+        ("EC-05", False, VALID_REPO_SLUG, CLIENT_OLDER_VERSION, GITHUB_LATEST_VERSION, False, True, None, 200, ""),  # Cache not expired
+        ("EC-06", False, VALID_REPO_SLUG, CLIENT_NEWER_VERSION, GITHUB_LATEST_VERSION, True, False, None, 200, ""),  # Cache expired
+        ("EC-07", False, VALID_REPO_SLUG, CLIENT_NEWER_VERSION, GITHUB_LATEST_VERSION, False, False, None, 200, ""), # Cache not expired
+    ])
+    def test_check_updates_edge_cases(self, test_id, force_update_check, repo_slug, client_version, latest_version, cache_expired, update_expected, expected_exception, expected_status_code, expected_message):
+        # Arrange
+        with gitHubUpdateChecker.app.test_request_context(json={'forceUpdateCheck': force_update_check, 'AppInfo': {'repoSlug': repo_slug, 'currentVersion': client_version}}):
+            with patch('repository.RepositoryStoreManager.getUpdateInfoFromRepoRepository') as mock_get_update_info:
+                update_info = UpdateInfo(Repository(repo_slug))
+                update_info.repository.latestVersion = latest_version
+                mock_get_update_info.return_value = update_info
 
-            with patch('repository.RepositoryAccessManager') as mock_repo_access_manager:
-                mock_repo_access_manager.return_value.getRepoSlug.return_value = repo_slug
+                with patch('repository.RepositoryAccessManager') as mock_repo_access_manager:
+                    mock_repo_access_manager.return_value.getRepoSlug.return_value = repo_slug
 
-                with patch('repository.RepositoryStoreManager.saveRepoRepository') as mock_save_repo_repository:
-                    mock_save_repo_repository.return_value = None
+                    with patch('repository.RepositoryStoreManager.saveRepoRepository') as mock_save_repo_repository:
+                        mock_save_repo_repository.return_value = None
 
-                    with patch('gitHubUpdateChecker._getUpdateInfoFromGitHub') as mock_get_update_info_from_github:
-                        mock_get_update_info_from_github.return_value = MagicMock()
+                        with patch('gitHubUpdateChecker._getUpdateInfoFromGitHub') as mock_get_update_info_from_github:
+                            mock_get_update_info_from_github.return_value = MagicMock()
 
-                        with patch('gitHubUpdateChecker._populateUpdateInfoFromGitHubResponse') as mock_populate_update_info:
-                            mock_populate_update_info.return_value = None
+                            with patch('gitHubUpdateChecker._populateUpdateInfoFromGitHubResponse') as mock_populate_update_info:                            
+                                mock_populate_update_info.return_value = None
+                                
+                                with patch('repository.Repository.getLastCheckedTimestamp') as mock_getLastCheckedTimestamp:
+                                    mock_getLastCheckedTimestamp.return_value = datetime(1980, 1, 1) if cache_expired else datetime.now()                                
 
-                            # Act
-                            response = checkUpdates()
+                                    # Act
+                                    response = checkUpdates()
+                                    
+                                    # Assert
+                                    if expected_exception is None:                            
+                                        assert response.status_code == 200
+                                        assert response.json['updateAvailable'] == update_expected
+                                    else:
+                                        assert response.status_code == expected_status_code
+                                        assert expected_message in response.get_json()["error"]
 
-                            # Assert
-                            assert response.status_code == 200
-                            assert response.json['updateAvailable'] == (client_version != latest_version)
 
-@pytest.mark.parametrize("test_id, force_update_check, repo_slug, client_version, latest_version, cache_expired", edge_cases_data)
-def test_check_updates_edge_cases(test_id, force_update_check, repo_slug, client_version, latest_version, cache_expired):
-    # Arrange
-    with app.test_request_context(json={'forceUpdateCheck': force_update_check, 'AppInfo': {'repoSlug': repo_slug, 'currentVersion': client_version}}):
-        with patch('repository.RepositoryStoreManager.getUpdateInfoFromRepoRepository') as mock_get_update_info:
-            update_info = UpdateInfo(Repository(repo_slug))
-            update_info.repository.latestVersion = latest_version
-            mock_get_update_info.return_value = update_info
+    #==============================================================================================================================
+    # Data and tests for error cases
+    @pytest.mark.parametrize("test_id, force_update_check, repo_slug, client_version, latest_version, raised_exception, expected_status_code, exception_message", 
+    [
+        ("ERR-01", False, INVALID_REPO_SLUG, CLIENT_SAME_VERSION, GITHUB_LATEST_VERSION, RequestError, 400, "Request error"),
+        ("ERR-02", False, VALID_REPO_SLUG, CLIENT_SAME_VERSION, GITHUB_LATEST_VERSION, EnvironmentError, 500, "Environment error"),
+        ("ERR-03", False, VALID_REPO_SLUG, CLIENT_SAME_VERSION, GITHUB_LATEST_VERSION, UpdateCheckingError, 500, "Update checking error"),
+        ("ERR-04", False, VALID_REPO_SLUG, CLIENT_SAME_VERSION, GITHUB_LATEST_VERSION, Exception, 500, "An internal error occurred. Mention the following error key when requesting support"),
+    ])
+    def test_check_updates_error_cases(self, test_id, force_update_check, repo_slug, client_version, latest_version, raised_exception, expected_status_code, exception_message):
+        """Expect the method to never fail but instead return a response referring to the nature of the error.
+        """
+        # Arrange
+        with gitHubUpdateChecker.app.test_request_context(json={'forceUpdateCheck': force_update_check, 'AppInfo': {'repoSlug': repo_slug, 'currentVersion': client_version}}):
+            with patch('repository.RepositoryStoreManager.getUpdateInfoFromRepoRepository') as mock_get_update_info:
+                update_info = UpdateInfo(Repository(repo_slug))
+                update_info.repository.latestVersion = latest_version
+                mock_get_update_info.return_value = update_info
 
-            with patch('repository.RepositoryAccessManager') as mock_repo_access_manager:
-                mock_repo_access_manager.return_value.getRepoSlug.return_value = repo_slug
+                with patch('gitHubUpdateChecker._parseRequest') as mock_parse_request:
 
-                with patch('repository.RepositoryStoreManager.saveRepoRepository') as mock_save_repo_repository:
-                    mock_save_repo_repository.return_value = None
+                    mock_parse_request.side_effect = raised_exception(exception_message, expected_status_code, [], None)
 
-                    with patch('gitHubUpdateChecker._getUpdateInfoFromGitHub') as mock_get_update_info_from_github:
-                        mock_get_update_info_from_github.return_value = MagicMock()
+                    # Act
+                    
+                    response = checkUpdates()
 
-                        with patch('gitHubUpdateChecker._populateUpdateInfoFromGitHubResponse') as mock_populate_update_info:
-                            mock_populate_update_info.return_value = None
+                    # Assert
+                    assert response.status_code == expected_status_code
+                    assert exception_message in response.get_json()["error"]
 
-                            # Act
-                            response = checkUpdates()
 
-                            # Assert
-                            assert response.status_code == 200
-                            assert response.json['updateAvailable'] == (client_version != latest_version)

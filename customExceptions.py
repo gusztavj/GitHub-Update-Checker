@@ -76,7 +76,7 @@ class UpdateCheckingError(StructuredErrorInfo):
         
 # Errors related to environmental issues ******************************************************************************************
 class EnvironmentError(StructuredErrorInfo):
-    """Represents an error related to enrivonment or infrastructure issues. Subclass of `StructuredErrorInfo`."""
+    """Represents an error related to environment or infrastructure issues. Subclass of `StructuredErrorInfo`."""
 
     def __init__(self, responseMessage: str, responseCode: int, logEntries: None, innerException: Exception = None):
         """Register a new error of this kind.
