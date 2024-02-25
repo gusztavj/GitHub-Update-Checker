@@ -1,9 +1,11 @@
 
+# Imports #########################################################################################################################
+
+# Third-party imports -------------------------------------------------------------------------------------------------------------
 from flask import jsonify, make_response, Response, g
-import flask
 
 
-# Base custom exception to support debugging **************************************************************************************
+# Base custom exception to support debugging ######################################################################################
 class StructuredErrorInfo(Exception):
     """
     Error information with separate log message and response information to centralize processing.
@@ -21,7 +23,10 @@ class StructuredErrorInfo(Exception):
     
     innerException: Exception
     """The original exception triggering this one to be registered."""
+
+    # Public methods ==============================================================================================================
     
+    # Get response ----------------------------------------------------------------------------------------------------------------
     def response(self) -> Response:
         """The response to return for an error."""
         responseJson = {"error": self.responseMessage}
@@ -43,10 +48,11 @@ class StructuredErrorInfo(Exception):
         self.innerException = innerException        
         
     
-# Errors related to requests ******************************************************************************************************
+# Errors related to requests ######################################################################################################
 class RequestError(StructuredErrorInfo):
     """Represents an error related to request processing. Subclass of `StructuredErrorInfo`."""
     
+    # Instantiate =================================================================================================================
     # Lifecycle management ========================================================================================================
     def __init__(self, responseMessage: str, responseCode: int, logEntries: None, innerException: Exception = None):
         """Register a new error of this kind.
@@ -59,10 +65,11 @@ class RequestError(StructuredErrorInfo):
         """
         super().__init__(responseMessage=responseMessage, responseCode=responseCode, logEntries=logEntries, innerException=innerException)
         
-# Errors related to update checking ***********************************************************************************************
+# Errors related to update checking ###############################################################################################
 class UpdateCheckingError(StructuredErrorInfo):
     """Represents an error related to update checking. Subclass of `StructuredErrorInfo`."""
     
+    # Lifecycle management ========================================================================================================
     def __init__(self, responseMessage: str, responseCode: int, logEntries = None, innerException: Exception = None):
         """Register a new error of this kind.
 
@@ -74,10 +81,11 @@ class UpdateCheckingError(StructuredErrorInfo):
         """
         super().__init__(responseMessage=responseMessage, responseCode=responseCode, logEntries=logEntries, innerException=innerException)
         
-# Errors related to environmental issues ******************************************************************************************
+# Errors related to environmental issues ##########################################################################################
 class EnvironmentError(StructuredErrorInfo):
     """Represents an error related to environment or infrastructure issues. Subclass of `StructuredErrorInfo`."""
 
+    # Lifecycle management ========================================================================================================
     def __init__(self, responseMessage: str, responseCode: int, logEntries: None, innerException: Exception = None):
         """Register a new error of this kind.
 

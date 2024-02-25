@@ -47,27 +47,41 @@
 #
 # *********************************************************************************************************************************
 
+# Imports #########################################################################################################################
+
+# Future -- must be first ---------------------------------------------------------------------------------------------------------
 from __future__ import annotations
-from dataclasses import dataclass
-from datetime import datetime, timedelta
-from json import JSONEncoder, JSONDecoder
-from logging.config import dictConfig
-from typing import List
+
+# Standard libraries --------------------------------------------------------------------------------------------------------------
 import contextlib
 import json
 import logging
 import os
 import re
-import requests
 import time
 import uuid
 
+# Standard library elements -------------------------------------------------------------------------------------------------------
+from datetime import datetime, timedelta
+from typing import List
+
+from dataclasses import dataclass
+from json import JSONEncoder, JSONDecoder
+from logging.config import dictConfig
+
+# Third-party imports -------------------------------------------------------------------------------------------------------------
+import requests
+
+# Flask
 from flask import Flask, jsonify, request, make_response, Response, g
 from flask.logging import default_handler
+
+# Own libraries and elements ------------------------------------------------------------------------------------------------------
 from customExceptions import RequestError, EnvironmentError, UpdateCheckingError
 
 import repository
 from repository import RepositoryAccessManager, Repository, RepositoryStoreManager, UpdateInfo
+
 
 
 # Init stuff ======================================================================================================================
@@ -345,7 +359,7 @@ def _getUpdateInfoFromGitHub(repoConn: RepositoryAccessManager) -> Response:
     
     timeout = 5
     try:                
-        response = requests.get(repoConn.repoReleaseApiUrl(), timeout=timeout, auth=(repoConn.username, repoConn.token()))
+        response = requests.get(repoConn.repoReleaseApiUrl(), timeout=timeout, auth=(repoConn.username(), repoConn.token()))
         
     except requests.exceptions.Timeout as tex:
         whatHappened = f"Request to {repoConn.repoReleaseApiUrl()} timed out after {timeout} seconds"
@@ -353,17 +367,17 @@ def _getUpdateInfoFromGitHub(repoConn: RepositoryAccessManager) -> Response:
         raise UpdateCheckingError(
             responseMessage = "", 
             responseCode = 200,
-            logEntries = [whatHappened, "Details:", json.dumps(response.json())],
+            logEntries = [whatHappened],
             innerException = None
             ) from tex
         
     except Exception as ex: 
-        whatHappened = f"Unexpected error of {type(ex).__name} occurred. Exception: {ex}"
+        whatHappened = f"Unexpected error of {type(ex).__name__} occurred. Details: {ex}"
 
         raise UpdateCheckingError(
             responseMessage = "", 
             responseCode = 200,
-            logEntries = [whatHappened, "Response:", json.dumps(response.json())],
+            logEntries = [whatHappened],
             innerException = None
             ) from ex
 

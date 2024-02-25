@@ -1,17 +1,20 @@
 
+# Imports #########################################################################################################################
 
+# Standard libraries --------------------------------------------------------------------------------------------------------------
 import datetime
-from datetime import datetime, timedelta
 import re
-
 import pytest
 
+# Standard library elements -------------------------------------------------------------------------------------------------------
+from datetime import datetime
+
+# Own libraries and elements ------------------------------------------------------------------------------------------------------
 import repository
-from repository import *
-
-from gitHubUpdateChecker import *
-
 import customExceptions
+
+from repository import *
+from gitHubUpdateChecker import *
 
 # Tests for the RepositoryAccessManager class #####################################################################################
 class TestRepositoryAccessManager:

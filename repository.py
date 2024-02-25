@@ -1,17 +1,21 @@
+# Imports #########################################################################################################################
+
+# Future -- must be first ---------------------------------------------------------------------------------------------------------
 from __future__ import annotations
 
+# Standard libraries --------------------------------------------------------------------------------------------------------------
 import json
 import os
 import re
 import uuid
 
+# Standard library elements -------------------------------------------------------------------------------------------------------
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from json import JSONEncoder, JSONDecoder
 from typing import List, Optional
 
-
-import customExceptions
+# Own libraries and elements ------------------------------------------------------------------------------------------------------
 from customExceptions import RequestError, EnvironmentError
 
 # Global stuff ####################################################################################################################
@@ -90,18 +94,30 @@ class RepositoryAccessManager:
         return self._repoBase + self.getRepoSlug() + "/releases/"    
 
     # Get username ----------------------------------------------------------------------------------------------------------------
-    def username(self):
+    def username(self):  # sourcery skip: class-extract-method
         """Username for API access"""
-        # TODO: Get username from environment variable
-        os.environ['GITHUB_USER_NAME'] = "gusztavj"
-        return os.environ.get("GITHUB_USER_NAME")    
+        username = os.environ.get("GITHUB_USER_NAME")    
+        
+        if username is None:
+            raise ValueError("The GitHub user name is not set.")
+        if len(username) == 0:
+            raise ValueError("The GitHub user name is set to an empty string.")
+        
+        return username
     
     # Get token -------------------------------------------------------------------------------------------------------------------
     def token(self):
         """GitHub token"""
         # TODO: Get token from environment variable
-        os.environ['GITHUB_API_TOKEN'] = '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'
-        return os.environ.get('GITHUB_API_TOKEN')
+        #os.environ['GITHUB_API_TOKEN'] = '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'
+        token = os.environ.get('GITHUB_API_TOKEN')
+                
+        if token is None:
+            raise ValueError("The GitHub access token is not set.")
+        if len(token) == 0:
+            raise ValueError("The GitHub access token is set to an empty string.")
+        
+        return token
         
     
     # Lifecycle management ========================================================================================================
