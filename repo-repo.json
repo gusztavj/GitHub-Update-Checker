@@ -2,7 +2,7 @@
     {
         "repoSlug": "T1nkR-Mesh-Name-Synchronizer",
         "checkFrequencyDays": 3,
-        "lastCheckedTimestamp": "2024-02-25 13:36:42",
+        "lastCheckedTimestamp": "2024-02-26 14:22:52",
         "latestVersion": "v1.0.2",
         "latestVersionName": "T1nk-R Mesh Name Synchronizer add-on for Blender v1.0.2",
         "releaseUrl": "https://api.github.com/repos/gusztavj/T1nkR-Mesh-Name-Synchronizer/releases/latest",

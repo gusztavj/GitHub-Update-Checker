@@ -60,6 +60,7 @@ import os
 import re
 import time
 import uuid
+import sys
 
 # Standard library elements -------------------------------------------------------------------------------------------------------
 from datetime import datetime, timedelta
@@ -73,7 +74,7 @@ from logging.config import dictConfig
 import requests
 
 # Flask
-from flask import Flask, jsonify, request, make_response, Response, g
+from flask import Flask, jsonify, request, make_response, Response, g, has_request_context
 from flask.logging import default_handler
 
 # Own libraries and elements ------------------------------------------------------------------------------------------------------
@@ -85,6 +86,8 @@ from repository import RepositoryAccessManager, Repository, RepositoryStoreManag
 
 
 # Init stuff ======================================================================================================================
+sys.path.insert(0, os.path.dirname(__file__))
+
 dateTimeFormat = "%Y-%m-%d %H:%M:%S"
 """Date and time format for business data"""
 
@@ -99,20 +102,34 @@ class UTCFormatter(logging.Formatter):
     converter = time.gmtime
 
 # Log configuration ---------------------------------------------------------------------------------------------------------------
+
+class RequestFormatter(logging.Formatter):
+    def format(self, record):
+        record.url = request.url if has_request_context() and request else 'N/A'
+        record.remote_addr = request.remote_addr if has_request_context() and request else 'N/A'
+        record.session_id = g.get('session_id', 'unknown') if has_request_context() else 'N/A'
+        return super().format(record)
+
+
 dictConfig(
     {
         "version": 1,
         "formatters": {
-            "default": {
-                "format": "[%(asctime)s] %(levelname)s | %(module)s >>> %(message)s",
-                "datefmt": "%B %d, %Y %H:%M:%S",
+            "myFormatter": {
+                '()': "gitHubUpdateChecker.RequestFormatter",
+                "format": f"[%(asctime)s] %(levelname)-8s\t|%(remote_addr)s\t|session_id=%(session_id)s\t|%(module)s\t >>> %(message)s",
+                "datefmt": "%B %d, %Y %H:%M:%S"
+            },
+            "default": {                
+                "format": f"[%(asctime)s] %(levelname)s\t|%(module)s\t >>> %(message)s",
+                "datefmt": "%B %d, %Y %H:%M:%S"
             }
         },
         "handlers": {
             "console": {
                 "class": "logging.StreamHandler",
                 "stream": "ext://sys.stdout",
-                "formatter": "default",
+                "formatter": "myFormatter"
             },
             "time-rotate-file-logging": {
                 "class": "logging.handlers.TimedRotatingFileHandler",
@@ -120,12 +137,12 @@ dictConfig(
                 "when": "W1",
                 "interval": 10,
                 "backupCount": 5,
-                "formatter": "default",
+                "formatter": "myFormatter"
             },
         },
         "root": {
             "level": "DEBUG",
-            "handlers": ["console", "time-rotate-file-logging"],
+            "handlers": ["console", "time-rotate-file-logging"]
         },
     }
 )
@@ -149,8 +166,43 @@ def create_app(test_config=None):
         os.makedirs(app.instance_path)
         
     app.logger.removeHandler(default_handler)
+    for handler in app.logger.handlers:
+        handler.setFormatter(RequestFormatter)
+    
+    # handler = logging.StreamHandler()
+    # formatter = RequestFormatter()
+    # handler.setFormatter(formatter)
+    # app.logger.addHandler(handler)
+    
     app.secret_key = "d8ca62a10b0650feb93429bb9eb17a3c968375d6db418b9e"
-    app.logger.setLevel(logging.DEBUG)
+    
+    makeANoteOnLogging: bool = False
+    logWhat: str = ""    
+    
+    # Try to read configured log level or fall back to a default one
+    try:
+        requestedLevel = eval(os.environ.get("LOG_LEVEL"))        
+        
+        if requestedLevel in [logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR, logging.CRITICAL]:
+            app.logger.setLevel(requestedLevel)            
+        else:
+            app.logger.setLevel(logging.INFO)
+            makeANoteOnLogging = True
+            logWhat = f"LOG_LEVEL set to {os.environ.get('LOG_LEVEL')}, and cannot be interpreted or applied."
+        
+    except Exception as err:
+        app.logger.setLevel(logging.INFO)
+        makeANoteOnLogging = True
+        logWhat = f"LOG_LEVEL is '{os.environ.get('LOG_LEVEL')}'. Can't eval LOG_LEVEL for {err}"        
+    
+    app.logger.critical(f"Starting gitHubUpdateChecker at {datetime.now()}")
+    app.logger.critical(f"Log level set to {app.logger.getEffectiveLevel()}")
+
+    # If we could not read the log level from the environment variable, log an error about it    
+    if makeANoteOnLogging:
+        app.logger.critical(logWhat)
+
+    
     app.config["repoRepository"] = {}
     app.config["dateTimeFormat"] = dateTimeFormat
         
@@ -167,6 +219,16 @@ def create_app(test_config=None):
 app = create_app()
 repository.app = app
 
+# Event handlers ###################################################################################################################
+
+# Generate session ID at request creation===========================================================================================
+@app.before_request
+def before_request():
+    """Create a session ID.
+    
+    Returns: A unique session ID.
+    """
+    g.session_id = uuid.uuid4()
 
 
 # API Endpoints ###################################################################################################################
