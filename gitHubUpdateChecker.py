@@ -86,7 +86,7 @@ from repository import RepositoryAccessManager, Repository, RepositoryStoreManag
 
 
 # Init stuff ======================================================================================================================
-appVersion = "1.0.0"
+appVersion = "1.0.1"
 
 sys.path.insert(0, os.path.dirname(__file__))
 
