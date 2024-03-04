@@ -1,0 +1,2209 @@
+{
+	"info": {
+		"_postman_id": "980ffaf2-73df-4c35-b60f-e0ef3f4fc616",
+		"name": "GitHub Update Checker",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "24716975"
+	},
+	"item": [
+		{
+			"name": "API Tests",
+			"item": [
+				{
+					"name": "Forced check",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Read service URL from environment variables\r",
+									"serviceUrl = pm.environment.get(\"service-url\");\r",
+									"\r",
+									"\r",
+									"// Send a request for forced check to get to know the current latest check date \r",
+									"// in order to be able to tell if non-forced checks works fine\r",
+									"\r",
+									"pm.sendRequest(\r",
+									"    {\r",
+									"        url: `${serviceUrl}/getUpdateInfo`,\r",
+									"        method: 'POST',\r",
+									"        header: {\"Content-Type\": \"application/json\"},\r",
+									"        body: { \r",
+									"            mode: 'raw',\r",
+									"            raw:JSON.stringify(\r",
+									"                {\r",
+									"                    \"appInfo\": {\r",
+									"                        \"repoSlug\": pm.collectionVariables.get(\"repo-slug\"),\r",
+									"                        \"currentVersion\": pm.collectionVariables.get(\"current-version\")\r",
+									"                    },\r",
+									"                    \"forceUpdateCheck\": \"true\"\r",
+									"                }\r",
+									"            )\r",
+									"        }  \r",
+									"    }, \r",
+									"    function (err, response) { \r",
+									"        // Save the last check timestamp\r",
+									"        pm.collectionVariables.set(\"forced-check-timestamp\", response.json().repository.lastCheckedTimestamp);\r",
+									"        \r",
+									"        //console.log(\"Timestamp in pre-request script: \" + pm.collectionVariables.get(\"forced-check-timestamp\"));\r",
+									"\r",
+									"        // Wait one second so that if update will inadvertently be forced, the timestamp got here \r",
+									"        // and the one in the post request will differ\r",
+									"        setTimeout(function(){}, 1000);\r",
+									"    }\r",
+									");\r",
+									"\r",
+									""
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"\r",
+									"// Check status code --------------------------------------------------------------------------------\r",
+									"pm.test(\"Status code is 200\", function () {\r",
+									"    pm.response.to.have.status(200);\r",
+									"});\r",
+									"\r",
+									"// Check returned repo slug--------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo slug returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoSlug).to.eq(pm.collectionVariables.get(\"repo-slug\"));       \r",
+									"});\r",
+									"\r",
+									"// Check returned repo URL --------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoUrl).to.eq(\"https://github.com/gusztavj/\" + pm.collectionVariables.get(\"repo-slug\") + \"/\");       \r",
+									"});\r",
+									"\r",
+									"// Check returned release URL -----------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Release URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.releaseUrl).to.eq(\"https://api.github.com/repos/gusztavj/\" + pm.collectionVariables.get(\"repo-slug\") + \"/releases/latest\");       \r",
+									"});\r",
+									"\r",
+									"// Update available is true  ------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Update available\", function () {\r",
+									"    pm.expect(pm.response.json().updateAvailable).to.eq(true);       \r",
+									"});\r",
+									"\r",
+									"\r",
+									"// Checking if request was actually made to GitHub --------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Checking for updates on GitHub was forced\", function () {\r",
+									"    \r",
+									"    lastCheck = pm.response.json().repository.lastCheckedTimestamp;   \r",
+									"    previousForcedCheck = pm.collectionVariables.get(\"forced-check-timestamp\");\r",
+									"    \r",
+									"    //console.log(\"Previous forced check timestamp: \" + lastCheck);\r",
+									"    //console.log(\"Current timestamp..............: \" + previousForcedCheck);\r",
+									"\r",
+									"    pm.expect(lastCheck, \"Based on timestamps, check for updates was not forced\").to.not.eq(previousForcedCheck);\r",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"appInfo\": {\r\n        \"repoSlug\": \"{{repo-slug}}\",\r\n        \"currentVersion\": \"{{current-version}}\"\r\n    },\r\n    \"forceUpdateCheck\": true\r\n\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Non-forced check",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"\r",
+									"// Check status code --------------------------------------------------------------------------------\r",
+									"pm.test(\"Status code is 200\", function () {\r",
+									"    pm.response.to.have.status(200);\r",
+									"});\r",
+									"\r",
+									"// Check returned repo slug--------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo slug returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoSlug).to.eq(pm.collectionVariables.get(\"repo-slug\"));       \r",
+									"});\r",
+									"\r",
+									"// Check returned repo URL --------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoUrl).to.eq(\"https://github.com/gusztavj/\" + pm.collectionVariables.get(\"repo-slug\") + \"/\");       \r",
+									"});\r",
+									"\r",
+									"// Check returned release URL -----------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Release URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.releaseUrl).to.eq(\"https://api.github.com/repos/gusztavj/\" + pm.collectionVariables.get(\"repo-slug\") + \"/releases/latest\");       \r",
+									"});\r",
+									"\r",
+									"// Update available is true  ------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Update available\", function () {\r",
+									"    pm.expect(pm.response.json().updateAvailable).to.eq(true);       \r",
+									"});\r",
+									"\r",
+									"// Checking if request was served from repo cache ---------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Checking for updates on GitHub was skipped\", function () {\r",
+									"    \r",
+									"    lastCheck = pm.response.json().repository.lastCheckedTimestamp;   \r",
+									"    previousForcedCheck = pm.collectionVariables.get(\"forced-check-timestamp\");\r",
+									"    \r",
+									"    //console.log(\"Previous forced check timestamp: \" + lastCheck);\r",
+									"    //console.log(\"Current timestamp..............: \" + previousForcedCheck);\r",
+									"\r",
+									"    pm.expect(lastCheck, \"Based on timestamps, check for updates was forced\").to.eq(previousForcedCheck);\r",
+									"});\r",
+									""
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Read service URL from environment variables\r",
+									"serviceUrl = pm.environment.get(\"service-url\");\r",
+									"\r",
+									"\r",
+									"// Send a request for forced check to get the to know the current latest check date \r",
+									"// to be able to tell if non-forced checks works fine\r",
+									"\r",
+									"pm.sendRequest(\r",
+									"    {\r",
+									"        url: `${serviceUrl}/getUpdateInfo`,\r",
+									"        method: 'POST',\r",
+									"        header: {\"Content-Type\": \"application/json\"},\r",
+									"        body: { \r",
+									"            mode: 'raw',\r",
+									"            raw:JSON.stringify(\r",
+									"                {\r",
+									"                    \"appInfo\": {\r",
+									"                        \"repoSlug\": pm.collectionVariables.get(\"repo-slug\"),\r",
+									"                        \"currentVersion\": pm.collectionVariables.get(\"current-version\")\r",
+									"                    },\r",
+									"                    \"forceUpdateCheck\": \"true\"\r",
+									"                }\r",
+									"            )\r",
+									"        }  \r",
+									"    }, \r",
+									"    function (err, response) { \r",
+									"        // Save the last check timestamp\r",
+									"        pm.collectionVariables.set(\"forced-check-timestamp\", response.json().repository.lastCheckedTimestamp);\r",
+									"        \r",
+									"        //console.log(\"Timestamp in pre-request script: \" + pm.collectionVariables.get(\"forced-check-timestamp\"));\r",
+									"\r",
+									"        // Wait one second so that if update will inadvertently be forced, the timestamp got here \r",
+									"        // and the one in the post request will differ\r",
+									"        setTimeout(function(){}, 1000);\r",
+									"    }\r",
+									");\r",
+									"\r",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"appInfo\": {\r\n        \"repoSlug\": \"{{repo-slug}}\",\r\n        \"currentVersion\": \"{{current-version}}\"\r\n    },\r\n    \"forceUpdateCheck\": \"false\"\r\n\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Implicit non-forced check by missing forceUpdateCheck parameter",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"\r",
+									"// Check status code --------------------------------------------------------------------------------\r",
+									"pm.test(\"Status code is 200\", function () {\r",
+									"    pm.response.to.have.status(200);\r",
+									"});\r",
+									"\r",
+									"// Check returned repo slug -------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo slug returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoSlug).to.eq(pm.collectionVariables.get(\"repo-slug\"));       \r",
+									"});\r",
+									"\r",
+									"// Check returned repo URL --------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoUrl).to.eq(\"https://github.com/gusztavj/\" + pm.collectionVariables.get(\"repo-slug\") + \"/\");       \r",
+									"});\r",
+									"\r",
+									"// Check returned release URL -----------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Release URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.releaseUrl).to.eq(\"https://api.github.com/repos/gusztavj/\" + pm.collectionVariables.get(\"repo-slug\") + \"/releases/latest\");       \r",
+									"});\r",
+									"\r",
+									"// Update available is true  ------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Update available\", function () {\r",
+									"    pm.expect(pm.response.json().updateAvailable).to.eq(true);       \r",
+									"});\r",
+									"\r",
+									"// Checking if request was served from repo cache ---------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Checking for updates on GitHub was skipped\", function () {\r",
+									"    \r",
+									"    lastCheck = pm.response.json().repository.lastCheckedTimestamp;   \r",
+									"    previousForcedCheck = pm.collectionVariables.get(\"forced-check-timestamp\");\r",
+									"    \r",
+									"    //console.log(\"Previous forced check timestamp: \" + lastCheck);\r",
+									"    //console.log(\"Current timestamp..............: \" + previousForcedCheck);\r",
+									"\r",
+									"    pm.expect(lastCheck, \"Based on timestamps, check for updates was forced\").to.eq(previousForcedCheck);\r",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Read service URL from environment variables\r",
+									"serviceUrl = pm.environment.get(\"service-url\");\r",
+									"\r",
+									"\r",
+									"// Send a request for forced check to get the to know the current latest check date \r",
+									"// to be able to tell if non-forced checks works fine\r",
+									"\r",
+									"pm.sendRequest(\r",
+									"    {\r",
+									"        url: `${serviceUrl}/getUpdateInfo`,\r",
+									"        method: 'POST',\r",
+									"        header: {\"Content-Type\": \"application/json\"},\r",
+									"        body: { \r",
+									"            mode: 'raw',\r",
+									"            raw:JSON.stringify(\r",
+									"                {\r",
+									"                    \"appInfo\": {\r",
+									"                        \"repoSlug\": pm.collectionVariables.get(\"repo-slug\"),\r",
+									"                        \"currentVersion\": pm.collectionVariables.get(\"current-version\")\r",
+									"                    },\r",
+									"                    \"forceUpdateCheck\": \"true\"\r",
+									"                }\r",
+									"            )\r",
+									"        }  \r",
+									"    }, \r",
+									"    function (err, response) { \r",
+									"        // Save the last check timestamp\r",
+									"        pm.collectionVariables.set(\"forced-check-timestamp\", response.json().repository.lastCheckedTimestamp);\r",
+									"        \r",
+									"        //console.log(\"Timestamp in pre-request script: \" + pm.collectionVariables.get(\"forced-check-timestamp\"));\r",
+									"\r",
+									"        // Wait one second so that if update will inadvertently be forced, the timestamp got here \r",
+									"        // and the one in the post request will differ\r",
+									"        setTimeout(function(){}, 1000);\r",
+									"    }\r",
+									");\r",
+									"\r",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"appInfo\": {\r\n        \"repoSlug\": \"{{repo-slug}}\",\r\n        \"currentVersion\": \"{{current-version}}\"\r\n    }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Implicit non-forced check by bad forceUpdateCheck parameter",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"\r",
+									"// Check status code --------------------------------------------------------------------------------\r",
+									"pm.test(\"Status code is 200\", function () {\r",
+									"    pm.response.to.have.status(200);\r",
+									"});\r",
+									"\r",
+									"// Checking timestamp is old ------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo slug returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoSlug).to.eq(pm.collectionVariables.get(\"repo-slug\"));       \r",
+									"});\r",
+									"\r",
+									"// Check returned repo URL --------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoUrl).to.eq(\"https://github.com/gusztavj/\" + pm.collectionVariables.get(\"repo-slug\") + \"/\");       \r",
+									"});\r",
+									"\r",
+									"// Check returned release URL -----------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Release URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.releaseUrl).to.eq(\"https://api.github.com/repos/gusztavj/\" + pm.collectionVariables.get(\"repo-slug\") + \"/releases/latest\");       \r",
+									"});\r",
+									"\r",
+									"// Update available is true  ------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Update available\", function () {\r",
+									"    pm.expect(pm.response.json().updateAvailable).to.eq(true);       \r",
+									"});\r",
+									"\r",
+									"// Checking if request was served from repo cache ---------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Checking for updates on GitHub was skipped\", function () {\r",
+									"    \r",
+									"    lastCheck = pm.response.json().repository.lastCheckedTimestamp;   \r",
+									"    previousForcedCheck = pm.collectionVariables.get(\"forced-check-timestamp\");\r",
+									"    \r",
+									"    console.log(\"Previous forced check timestamp: \" + lastCheck);\r",
+									"    console.log(\"Current timestamp..............: \" + previousForcedCheck);\r",
+									"\r",
+									"    pm.expect(lastCheck, \"Based on timestamps, check for updates was forced\").to.eq(previousForcedCheck);\r",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Read service URL from environment variables\r",
+									"serviceUrl = pm.environment.get(\"service-url\");\r",
+									"\r",
+									"\r",
+									"// Send a request for forced check to get the to know the current latest check date \r",
+									"// to be able to tell if non-forced checks works fine\r",
+									"\r",
+									"pm.sendRequest(\r",
+									"    {\r",
+									"        url: `${serviceUrl}/getUpdateInfo`,\r",
+									"        method: 'POST',\r",
+									"        header: {\"Content-Type\": \"application/json\"},\r",
+									"        body: { \r",
+									"            mode: 'raw',\r",
+									"            raw:JSON.stringify(\r",
+									"                {\r",
+									"                    \"appInfo\": {\r",
+									"                        \"repoSlug\": pm.collectionVariables.get(\"repo-slug\"),\r",
+									"                        \"currentVersion\": pm.collectionVariables.get(\"current-version\")\r",
+									"                    },\r",
+									"                    \"forceUpdateCheck\": \"true\"\r",
+									"                }\r",
+									"            )\r",
+									"        }  \r",
+									"    }, \r",
+									"    function (err, response) { \r",
+									"        // Save the last check timestamp\r",
+									"        pm.collectionVariables.set(\"forced-check-timestamp\", response.json().repository.lastCheckedTimestamp);\r",
+									"        \r",
+									"        //console.log(\"Timestamp in pre-request script: \" + pm.collectionVariables.get(\"forced-check-timestamp\"));\r",
+									"\r",
+									"        // Wait one second so that if update will inadvertently be forced, the timestamp got here \r",
+									"        // and the one in the post request will differ\r",
+									"        setTimeout(function(){}, 1000);\r",
+									"    }\r",
+									");\r",
+									"\r",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"appInfo\": {\r\n        \"repoSlug\": \"{{repo-slug}}\",\r\n        \"currentVersion\": \"{{current-version}}\"\r\n    },\r\n    \"forceUpdateCheck\": \"Foo\"\r\n\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Non-forced check of another repo",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"\r",
+									"// Check status code --------------------------------------------------------------------------------\r",
+									"pm.test(\"Status code is 200\", function () {\r",
+									"    pm.response.to.have.status(200);\r",
+									"});\r",
+									"\r",
+									"// Check returned repo slug--------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo slug returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoSlug).to.eq(pm.collectionVariables.get(\"another-repo-slug\"));       \r",
+									"});\r",
+									"\r",
+									"// Check returned repo URL --------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoUrl).to.eq(\"https://github.com/gusztavj/\" + pm.collectionVariables.get(\"another-repo-slug\") + \"/\");       \r",
+									"});\r",
+									"\r",
+									"// Check returned release URL -----------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Release URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.releaseUrl).to.eq(\"https://api.github.com/repos/gusztavj/\" + pm.collectionVariables.get(\"another-repo-slug\") + \"/releases/latest\");       \r",
+									"});\r",
+									"\r",
+									"// Update available is true  ------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Update available\", function () {\r",
+									"    pm.expect(pm.response.json().updateAvailable).to.eq(true);       \r",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"appInfo\": {\r\n        \"repoSlug\": \"{{another-repo-slug}}\",\r\n        \"currentVersion\": \"{{current-version}}\"\r\n    },\r\n    \"forceUpdateCheck\": \"false\"\r\n\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Malformed request",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Check status code --------------------------------------------------------------------------------\r",
+									"pm.test(\"Status code is 400\", function () {\r",
+									"    pm.response.to.have.status(400);\r",
+									"});\r",
+									"\r",
+									"// Check error message ------------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Error message is expected\", function () {\r",
+									"    pm.expect(pm.response.json().error).to.contain(\"POST body is not well-formed JSON.\");       \r",
+									"});\r",
+									""
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "Foo",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Missing AppInfo in request",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Check status code --------------------------------------------------------------------------------\r",
+									"pm.test(\"Status code is 400\", function () {\r",
+									"    pm.response.to.have.status(400);\r",
+									"});\r",
+									"\r",
+									"// Check error message ------------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Error message is expected\", function () {\r",
+									"    pm.expect(pm.response.json().error).to.eq(\"'appInfo' key missing from request\");       \r",
+									"});\r",
+									""
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"forceUpdateCheck\": \"false\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Missing repo in request",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Check status code --------------------------------------------------------------------------------\r",
+									"pm.test(\"Status code is 400\", function () {\r",
+									"    pm.response.to.have.status(400);\r",
+									"});\r",
+									"\r",
+									"// Check error message ------------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Error message is expected\", function () {\r",
+									"    pm.expect(pm.response.json().error).to.eq(\"The 'repoSlug' key is missing from the 'appInfo' object, can't find out which repo to check.\");       \r",
+									"});\r",
+									""
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"appInfo\": {\r\n        \"currentVersion\": \"{{current-version}}\"\r\n    },\r\n    \"forceUpdateCheck\": \"false\"\r\n\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Non-existing repo specified",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Check status code --------------------------------------------------------------------------------\r",
+									"pm.test(\"Status code is 404\", function () {\r",
+									"    pm.response.to.have.status(404);\r",
+									"});\r",
+									"\r",
+									"// Check error message ------------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Error message is expected\", function () {\r",
+									"    pm.expect(pm.response.json().error).to.eq(\"GitHub returned with HTTP 404. The repo URL specified in the request does not exist. Unknown repo specified?\");       \r",
+									"});\r",
+									""
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"appInfo\": {\r\n        \"repoSlug\": \"{{repo-slug}}-foo-bar\",\r\n        \"currentVersion\": \"{{current-version}}\"\r\n    },\r\n    \"forceUpdateCheck\": \"false\"\r\n\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Repo slug ends with slash",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Check status code --------------------------------------------------------------------------------\r",
+									"pm.test(\"Status code is 200\", function () {\r",
+									"    pm.response.to.have.status(200);\r",
+									"});\r",
+									"\r",
+									"// Check returned repo slug--------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo slug returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoSlug).to.eq(pm.collectionVariables.get(\"repo-slug\"));       \r",
+									"});\r",
+									"\r",
+									"// Check returned repo URL --------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoUrl).to.eq(\"https://github.com/gusztavj/\" + pm.collectionVariables.get(\"repo-slug\") + \"/\");       \r",
+									"});\r",
+									"\r",
+									"// Check returned release URL -----------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Release URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.releaseUrl).to.eq(\"https://api.github.com/repos/gusztavj/\" + pm.collectionVariables.get(\"repo-slug\") + \"/releases/latest\");       \r",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"appInfo\": {\r\n        \"repoSlug\": \"{{repo-slug}}/\",\r\n        \"currentVersion\": \"{{current-version}}\"\r\n    },\r\n    \"forceUpdateCheck\": \"false\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Repo slug starts with slash",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Check status code --------------------------------------------------------------------------------\r",
+									"pm.test(\"Status code is 200\", function () {\r",
+									"    pm.response.to.have.status(200);\r",
+									"});\r",
+									"\r",
+									"// Check returned repo slug--------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo slug returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoSlug).to.eq(pm.collectionVariables.get(\"repo-slug\"));       \r",
+									"});\r",
+									"\r",
+									"// Check returned repo URL --------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoUrl).to.eq(\"https://github.com/gusztavj/\" + pm.collectionVariables.get(\"repo-slug\") + \"/\");       \r",
+									"});\r",
+									"\r",
+									"// Check returned release URL -----------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Release URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.releaseUrl).to.eq(\"https://api.github.com/repos/gusztavj/\" + pm.collectionVariables.get(\"repo-slug\") + \"/releases/latest\");       \r",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"appInfo\": {\r\n        \"repoSlug\": \"/{{repo-slug}}\",\r\n        \"currentVersion\": \"{{current-version}}\"\r\n    },\r\n    \"forceUpdateCheck\": \"false\"\r\n\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Repo slug contains double slashes",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Check status code --------------------------------------------------------------------------------\r",
+									"pm.test(\"Status code is 400\", function () {\r",
+									"    pm.response.to.have.status(400);\r",
+									"});\r",
+									"\r",
+									"// Check error message ------------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Error message is expected\", function () {\r",
+									"    pm.expect(pm.response.json().error).to.contain(\"Value specified for repo slug is not a valid URI.\");       \r",
+									"});\r",
+									""
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"appInfo\": {\r\n        \"repoSlug\": \"T1nkR-Mesh//-Name-Synchronizer\",\r\n        \"currentVersion\": \"{{current-version}}\"\r\n    },\r\n    \"forceUpdateCheck\": \"false\"\r\n\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Missing version number in request",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"\r",
+									"// Check status code --------------------------------------------------------------------------------\r",
+									"pm.test(\"Status code is 400\", function () {\r",
+									"    pm.response.to.have.status(400);\r",
+									"});\r",
+									"\r",
+									"// Check error message ------------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Error message is expected\", function () {\r",
+									"    pm.expect(pm.response.json().error).to.eq(\"The 'currentVersion' key missing from the 'appInfo' object, would not be able to determine if there's a newer version.\");       \r",
+									"});\r",
+									""
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"appInfo\": {\r\n        \"repoSlug\": \"{{repo-slug}}\"\r\n    },\r\n    \"forceUpdateCheck\": \"false\"\r\n\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Malformed version number in request",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Check status code --------------------------------------------------------------------------------\r",
+									"pm.test(\"Status code is 400\", function () {\r",
+									"    pm.response.to.have.status(400);\r",
+									"});\r",
+									"\r",
+									"// Check error message ------------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Error message is expected\", function () {\r",
+									"    pm.expect(pm.response.json().error).to.contain(\"Invalid version in 'currentVersion' of 'appInfo'. Version shall be specified as 'x.y.z' or 'x.y.z-foo'.\");       \r",
+									"});\r",
+									""
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"appInfo\": {\r\n        \"repoSlug\": \"{{repo-slug}}\",\r\n        \"currentVersion\": \"1.0\"\r\n    },\r\n    \"forceUpdateCheck\": \"false\"\r\n\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update for patch+ version",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"\r",
+									"// Check status code --------------------------------------------------------------------------------\r",
+									"pm.test(\"Status code is 200\", function () {\r",
+									"    pm.response.to.have.status(200);\r",
+									"});\r",
+									"\r",
+									"// Check returned repo slug--------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo slug returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoSlug).to.eq(pm.collectionVariables.get(\"repo-slug\"));       \r",
+									"});\r",
+									"\r",
+									"// Check returned repo URL --------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoUrl).to.eq(\"https://github.com/gusztavj/\" + pm.collectionVariables.get(\"repo-slug\") + \"/\");       \r",
+									"});\r",
+									"\r",
+									"// Check returned release URL -----------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Release URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.releaseUrl).to.eq(\"https://api.github.com/repos/gusztavj/\" + pm.collectionVariables.get(\"repo-slug\") + \"/releases/latest\");       \r",
+									"});\r",
+									"\r",
+									"// Update available is true  ------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Update not available\", function () {\r",
+									"    pm.expect(pm.response.json().updateAvailable).to.eq(false);       \r",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Read service URL from environment variables\r",
+									"serviceUrl = pm.environment.get(\"service-url\");\r",
+									"\r",
+									"\r",
+									"// Send a request to get the current latest version number to be able\r",
+									"// to compute version numbers for one greater build, minor and major versions\r",
+									"\r",
+									"pm.sendRequest(\r",
+									"    {\r",
+									"        url: `${serviceUrl}/getUpdateInfo`,\r",
+									"        method: 'POST',\r",
+									"        header: {\"Content-Type\": \"application/json\"},\r",
+									"        body: { \r",
+									"            mode: 'raw',\r",
+									"            raw:JSON.stringify(\r",
+									"                {\r",
+									"                    \"appInfo\": {\r",
+									"                        \"repoSlug\": pm.collectionVariables.get(\"repo-slug\"),\r",
+									"                        \"currentVersion\": pm.collectionVariables.get(\"current-version\")\r",
+									"                    },\r",
+									"                    \"forceUpdateCheck\": \"false\"\r",
+									"                }\r",
+									"            )\r",
+									"        }  \r",
+									"    }, \r",
+									"    function (err, response) { \r",
+									"        const versionComponents = response.json().repository.latestVersion.split(\".\"); // Split the string at each dot\r",
+									"\r",
+									"        const vMajor = parseInt(versionComponents[0].slice(1), 10); // Get the x component by removing the \"v\" prefix\r",
+									"        const vMinor = parseInt(versionComponents[1], 10);\r",
+									"        const vPatch = parseInt(versionComponents[2], 10);\r",
+									"        \r",
+									"        // Store a version number with one patch level higher than the latest (to expect that the API won't offer update for it)\r",
+									"        pm.collectionVariables.set(\"beyond-latest-version\", `${vMajor}.${vMinor}.${vPatch + 1}`);\r",
+									"    }\r",
+									");\r",
+									"\r",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"appInfo\": {\r\n        \"repoSlug\": \"{{repo-slug}}\",\r\n        \"currentVersion\": \"{{beyond-latest-version}}\"\r\n    },\r\n    \"forceUpdateCheck\": \"false\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update for minor+ version",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"\r",
+									"// Check status code --------------------------------------------------------------------------------\r",
+									"pm.test(\"Status code is 200\", function () {\r",
+									"    pm.response.to.have.status(200);\r",
+									"});\r",
+									"\r",
+									"// Check returned repo slug--------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo slug returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoSlug).to.eq(pm.collectionVariables.get(\"repo-slug\"));       \r",
+									"});\r",
+									"\r",
+									"// Check returned repo URL --------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoUrl).to.eq(\"https://github.com/gusztavj/\" + pm.collectionVariables.get(\"repo-slug\") + \"/\");       \r",
+									"});\r",
+									"\r",
+									"// Check returned release URL -----------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Release URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.releaseUrl).to.eq(\"https://api.github.com/repos/gusztavj/\" + pm.collectionVariables.get(\"repo-slug\") + \"/releases/latest\");       \r",
+									"});\r",
+									"\r",
+									"// Update available is true  ------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Update not available\", function () {\r",
+									"    pm.expect(pm.response.json().updateAvailable).to.eq(false);       \r",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Read service URL from environment variables\r",
+									"serviceUrl = pm.environment.get(\"service-url\");\r",
+									"\r",
+									"\r",
+									"// Send a request to get the current latest version number to be able\r",
+									"// to compute version numbers for one greater build, minor and major versions\r",
+									"\r",
+									"pm.sendRequest(\r",
+									"    {\r",
+									"        url: `${serviceUrl}/getUpdateInfo`,\r",
+									"        method: 'POST',\r",
+									"        header: {\"Content-Type\": \"application/json\"},\r",
+									"        body: { \r",
+									"            mode: 'raw',\r",
+									"            raw:JSON.stringify(\r",
+									"                {\r",
+									"                    \"appInfo\": {\r",
+									"                        \"repoSlug\": pm.collectionVariables.get(\"repo-slug\"),\r",
+									"                        \"currentVersion\": pm.collectionVariables.get(\"current-version\")\r",
+									"                    },\r",
+									"                    \"forceUpdateCheck\": \"false\"\r",
+									"                }\r",
+									"            )\r",
+									"        }  \r",
+									"    }, \r",
+									"    function (err, response) { \r",
+									"        const versionComponents = response.json().repository.latestVersion.split(\".\"); // Split the string at each dot\r",
+									"\r",
+									"        const vMajor = parseInt(versionComponents[0].slice(1), 10); // Get the x component by removing the \"v\" prefix\r",
+									"        const vMinor = parseInt(versionComponents[1], 10);\r",
+									"        const vPatch = parseInt(versionComponents[2], 10);\r",
+									"        \r",
+									"        // Store a version number with one patch level higher than the latest (to expect that the API won't offer update for it)\r",
+									"        pm.collectionVariables.set(\"beyond-latest-version\", `${vMajor}.${vMinor + 1}.${vPatch}`);\r",
+									"    }\r",
+									");\r",
+									"\r",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"appInfo\": {\r\n        \"repoSlug\": \"{{repo-slug}}\",\r\n        \"currentVersion\": \"{{beyond-latest-version}}\"\r\n    },\r\n    \"forceUpdateCheck\": \"false\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update for major+ version",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"\r",
+									"// Check status code --------------------------------------------------------------------------------\r",
+									"pm.test(\"Status code is 200\", function () {\r",
+									"    pm.response.to.have.status(200);\r",
+									"});\r",
+									"\r",
+									"// Check returned repo slug--------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo slug returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoSlug).to.eq(pm.collectionVariables.get(\"repo-slug\"));       \r",
+									"});\r",
+									"\r",
+									"// Check returned repo URL --------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Repo URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.repoUrl).to.eq(\"https://github.com/gusztavj/\" + pm.collectionVariables.get(\"repo-slug\") + \"/\");       \r",
+									"});\r",
+									"\r",
+									"// Check returned release URL -----------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Release URL returned is as expected\", function () {\r",
+									"    pm.expect(pm.response.json().repository.releaseUrl).to.eq(\"https://api.github.com/repos/gusztavj/\" + pm.collectionVariables.get(\"repo-slug\") + \"/releases/latest\");       \r",
+									"});\r",
+									"\r",
+									"// Update available is true  ------------------------------------------------------------------------\r",
+									"\r",
+									"pm.test(\"Update not available\", function () {\r",
+									"    pm.expect(pm.response.json().updateAvailable).to.eq(false);       \r",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Read service URL from environment variables\r",
+									"serviceUrl = pm.environment.get(\"service-url\");\r",
+									"\r",
+									"\r",
+									"// Send a request to get the current latest version number to be able\r",
+									"// to compute version numbers for one greater build, minor and major versions\r",
+									"\r",
+									"pm.sendRequest(\r",
+									"    {\r",
+									"        url: `${serviceUrl}/getUpdateInfo`,\r",
+									"        method: 'POST',\r",
+									"        header: {\"Content-Type\": \"application/json\"},\r",
+									"        body: { \r",
+									"            mode: 'raw',\r",
+									"            raw:JSON.stringify(\r",
+									"                {\r",
+									"                    \"appInfo\": {\r",
+									"                        \"repoSlug\": pm.collectionVariables.get(\"repo-slug\"),\r",
+									"                        \"currentVersion\": pm.collectionVariables.get(\"current-version\")\r",
+									"                    },\r",
+									"                    \"forceUpdateCheck\": \"false\"\r",
+									"                }\r",
+									"            )\r",
+									"        }  \r",
+									"    }, \r",
+									"    function (err, response) { \r",
+									"        const versionComponents = response.json().repository.latestVersion.split(\".\"); // Split the string at each dot\r",
+									"\r",
+									"        const vMajor = parseInt(versionComponents[0].slice(1), 10); // Get the x component by removing the \"v\" prefix\r",
+									"        const vMinor = parseInt(versionComponents[1], 10);\r",
+									"        const vPatch = parseInt(versionComponents[2], 10);\r",
+									"        \r",
+									"        // Store a version number with one patch level higher than the latest (to expect that the API won't offer update for it)\r",
+									"        pm.collectionVariables.set(\"beyond-latest-version\", `${vMajor + 1}.${vMinor}.${vPatch}`);\r",
+									"    }\r",
+									");\r",
+									"\r",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"appInfo\": {\r\n        \"repoSlug\": \"{{repo-slug}}\",\r\n        \"currentVersion\": \"{{beyond-latest-version}}\"\r\n    },\r\n    \"forceUpdateCheck\": \"false\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Smoke Test",
+			"item": [
+				{
+					"name": "Get Update Info: Smoke",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var responseBodyJson = pm.response.json();\r",
+									"\r",
+									"// Determine if the request is run directly or by using a test data file\r",
+									"directRun = false;\r",
+									"if (pm.iterationData.has(\"test-name\")) {\r",
+									"    prefix = pm.iterationData.get(\"test-name\") + \": \";\r",
+									"    directRun = false;\r",
+									"}\r",
+									"else {\r",
+									"    prefix = \"Running request directly: \";\r",
+									"    directRun = true;\r",
+									"}\r",
+									"\r",
+									"// Check status code --------------------------------------------------------------------------------\r",
+									"pm.test(prefix + \"Status code is 200\", function () {\r",
+									"    expStatus = directRun ? 200 : expStatus = pm.iterationData.get(\"expected-status\");\r",
+									"    pm.response.to.have.status(expStatus);\r",
+									"});\r",
+									"\r",
+									"// Check returned repo URL --------------------------------------------------------------------------\r",
+									"\r",
+									"if (directRun) {\r",
+									"    expRepoUrl = pm.collectionVariables.get(\"github-root\") + pm.collectionVariables.get(\"repo-slug\");\r",
+									"} else {\r",
+									"    expRepoUrl = pm.collectionVariables.get(\"github-root\") + pm.iterationData.get(\"repo-slug\");\r",
+									"}\r",
+									"\r",
+									"pm.test(prefix + `Repo URL returned (${expRepoUrl}) is as expected`, function () {\r",
+									"    if (expRepoUrl.endsWith(\"/\"))\r",
+									"        pm.expect(responseBodyJson[\"repository\"][\"repoUrl\"]).to.eq(expRepoUrl);\r",
+									"    else\r",
+									"        pm.expect(responseBodyJson[\"repository\"][\"repoUrl\"]).to.eq(expRepoUrl + \"/\");       \r",
+									"});\r",
+									"\r",
+									"\r",
+									"// Check other properties -------------------------------------------------------------------------------\r",
+									"\r",
+									"if (!directRun) {\r",
+									"    if (pm.iterationData.has(\"expectations\")) {\r",
+									"        for (expectation in pm.iterationData.get(\"expectations\")) {\r",
+									"            key = pm.iterationData.get(\"expectations\")[expectation][\"key\"];\r",
+									"            keys = key.split(\".\");\r",
+									"            \r",
+									"            if (keys.length == 1) {\r",
+									"                propKey = keys[0];\r",
+									"            } else {\r",
+									"                nodeKey = keys[0];\r",
+									"                propKey = keys[1];\r",
+									"            }\r",
+									"\r",
+									"            if (pm.iterationData.get(\"expectations\")[expectation].hasOwnProperty(\"valueContains\")) {\r",
+									"                pm.test(prefix + `Check ${key} (contains)`, function () {\r",
+									"                    value = pm.iterationData.get(\"expectations\")[expectation][\"valueContains\"];\r",
+									"                    if (keys.length == 1)\r",
+									"                        pm.expect(responseBodyJson[propKey]).to.contain(value);\r",
+									"                    else\r",
+									"                        pm.expect(responseBodyJson[nodeKey][propKey]).to.contain(value);\r",
+									"                });\r",
+									"                \r",
+									"            } else if (pm.iterationData.get(\"expectations\")[expectation].hasOwnProperty(\"valueIs\")) {\r",
+									"                pm.test(prefix + `Check ${key} (equal)`, function () {\r",
+									"                    value = pm.iterationData.get(\"expectations\")[expectation][\"valueIs\"];\r",
+									"                    if (keys.length == 1)\r",
+									"                        pm.expect(responseBodyJson[propKey]).to.eq(value);\r",
+									"                    else\r",
+									"                        pm.expect(responseBodyJson[nodeKey][propKey]).to.eq(value);\r",
+									"                });\r",
+									"            }\r",
+									"        }\r",
+									"    }\r",
+									"}\r",
+									"\r",
+									""
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Save current values\r",
+									"// pm.collectionVariables.set(\"temp-repo-slug\", pm.collectionVariables.get(\"repo-slug\"));\r",
+									"// pm.collectionVariables.set(\"temp-current-version\", pm.collectionVariables.get(\"current-version\"));\r",
+									"// pm.collectionVariables.set(\"temp-force-update\", pm.collectionVariables.get(\"force-update\"));\r",
+									"\r",
+									"// Replace current values\r",
+									"// pm.collectionVariables.set(\"repo-slug\", \"T1nkR-Mesh-Name-Synchronizer/\");\r",
+									"// pm.collectionVariables.set(\"current-version\", \"1.0.0\")\r",
+									"// pm.collectionVariables.set(\"force-update\", false)"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"appInfo\": {\r\n        \"repoSlug\": \"{{repo-slug}}\",\r\n        \"currentVersion\": \"{{current-version}}\"\r\n    },\r\n    \"forceUpdateCheck\": \"{{force-update}}\"\r\n\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Check if Working (Get Update Info)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {\r",
+									"    pm.response.to.have.status(200);\r",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/vnd.api+json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"appInfo\": {\r\n        \"repoSlug\": \"{{repo-slug}}\",\r\n        \"currentVersion\": \"{{current-version}}\"\r\n    },\r\n    \"forceUpdateCheck\": false\r\n\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{service-url}}/getUpdateInfo",
+							"host": [
+								"{{service-url}}"
+							],
+							"path": [
+								"getUpdateInfo"
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "Repo #1, explicit non-forced",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/vnd.api+json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"AppInfo\": {\r\n        \"repoSlug\": \"T1nkR-Mesh-Name-Synchronizer\",\r\n        \"currentVersion\": \"(1,0,0)\"\r\n    },\r\n    \"forceUpdateCheck\": false\r\n\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "localhost:5000/getUpdateInfo",
+									"host": [
+										"localhost"
+									],
+									"port": "5000",
+									"path": [
+										"getUpdateInfo"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Server",
+									"value": "Werkzeug/3.0.1 Python/3.10.11"
+								},
+								{
+									"key": "Date",
+									"value": "Sun, 11 Feb 2024 09:39:27 GMT"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "Content-Length",
+									"value": "486"
+								},
+								{
+									"key": "Connection",
+									"value": "close"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"repository\": {\n        \"checkFrequencyDays\": 3,\n        \"lastCheckedTimestamp\": \"Sun, 11 Feb 2024 00:19:50 GMT\",\n        \"latestVersion\": \"v1.0.2\",\n        \"latestVersionName\": \"T1nk-R Mesh Name Synchronizer add-on for Blender v1.0.2\",\n        \"releaseUrl\": \"https://api.github.com/repos/gusztavj/T1nkR-Mesh-Name-Synchronizer/releases/latest\",\n        \"repoSlug\": \"T1nkR-Mesh-Name-Synchronizer\",\n        \"repoUrl\": \"https://github.com/gusztavj/T1nkR-Mesh-Name-Synchronizer/\"\n    },\n    \"updateAvailable\": false\n}"
+						},
+						{
+							"name": "Repo #1, implicit non-forced",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/vnd.api+json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"AppInfo\": {\r\n        \"repoSlug\": \"T1nkR-Mesh-Name-Synchronizer\",\r\n        \"currentVersion\": \"1.0.0\"\r\n    }\r\n\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "localhost:5000/getUpdateInfo",
+									"host": [
+										"localhost"
+									],
+									"port": "5000",
+									"path": [
+										"getUpdateInfo"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Server",
+									"value": "Werkzeug/3.0.1 Python/3.10.11"
+								},
+								{
+									"key": "Date",
+									"value": "Sun, 11 Feb 2024 09:39:41 GMT"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "Content-Length",
+									"value": "486"
+								},
+								{
+									"key": "Connection",
+									"value": "close"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"repository\": {\n        \"checkFrequencyDays\": 3,\n        \"lastCheckedTimestamp\": \"Sun, 11 Feb 2024 00:19:50 GMT\",\n        \"latestVersion\": \"v1.0.2\",\n        \"latestVersionName\": \"T1nk-R Mesh Name Synchronizer add-on for Blender v1.0.2\",\n        \"releaseUrl\": \"https://api.github.com/repos/gusztavj/T1nkR-Mesh-Name-Synchronizer/releases/latest\",\n        \"repoSlug\": \"T1nkR-Mesh-Name-Synchronizer\",\n        \"repoUrl\": \"https://github.com/gusztavj/T1nkR-Mesh-Name-Synchronizer/\"\n    },\n    \"updateAvailable\": false\n}"
+						},
+						{
+							"name": "Repo #1, forced",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/vnd.api+json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"AppInfo\": {\r\n        \"repoSlug\": \"T1nkR-Mesh-Name-Synchronizer\",\r\n        \"currentVersion\": \"1,0,0)\"\r\n    },\r\n    \"forceUpdateCheck\": true\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "localhost:5000/getUpdateInfo",
+									"host": [
+										"localhost"
+									],
+									"port": "5000",
+									"path": [
+										"getUpdateInfo"
+									]
+								}
+							},
+							"status": "INTERNAL SERVER ERROR",
+							"code": 500,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Server",
+									"value": "Werkzeug/3.0.1 Python/3.10.11"
+								},
+								{
+									"key": "Date",
+									"value": "Sun, 11 Feb 2024 09:39:48 GMT"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "Content-Length",
+									"value": "65"
+								},
+								{
+									"key": "Connection",
+									"value": "close"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"error\": \"An unexpected exception of ValueError occurred.\"\n}"
+						},
+						{
+							"name": "Repo #2, explicit non-forced",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"name": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"AppInfo\": {\r\n        \"repoSlug\": \"T1nkR-Blender-Unified-Rename\",\r\n        \"currentVersion\": \"1.0.0\"\r\n    },\r\n    \"forceUpdateCheck\": false\r\n\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "localhost:5000/getUpdateInfo",
+									"host": [
+										"localhost"
+									],
+									"port": "5000",
+									"path": [
+										"getUpdateInfo"
+									]
+								}
+							},
+							"_postman_previewlanguage": "Text",
+							"header": [],
+							"cookie": [],
+							"body": ""
+						},
+						{
+							"name": "Repo #2, implicit non-forced",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/vnd.api+json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"AppInfo\": {\r\n        \"repoSlug\": \"T1nkR-Blender-Unified-Rename\",\r\n        \"currentVersion\": \"1.0.0\"\r\n    }\r\n\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "localhost:5000/getUpdateInfo",
+									"host": [
+										"localhost"
+									],
+									"port": "5000",
+									"path": [
+										"getUpdateInfo"
+									]
+								}
+							},
+							"_postman_previewlanguage": "Text",
+							"header": [],
+							"cookie": [],
+							"body": ""
+						},
+						{
+							"name": "Repo #1, forced Copy",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/vnd.api+json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"AppInfo\": {\r\n        \"repoSlug\": \"T1nkR-Blender-Unified-Rename\",\r\n        \"currentVersion\": \"1.0.0\"\r\n    },\r\n    \"forceUpdateCheck\": true\r\n\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "localhost:5000/getUpdateInfo",
+									"host": [
+										"localhost"
+									],
+									"port": "5000",
+									"path": [
+										"getUpdateInfo"
+									]
+								}
+							},
+							"_postman_previewlanguage": "Text",
+							"header": [],
+							"cookie": [],
+							"body": ""
+						},
+						{
+							"name": "Non-existing repo, forced",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/vnd.api+json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"AppInfo\": {\r\n        \"repoSlug\": \"T1nkR-Mesh-Name-Synchronizer-non-existing\",\r\n        \"currentVersion\": \"1.0.0\"\r\n    },\r\n    \"forceUpdateCheck\": true\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "localhost:5000/getUpdateInfo",
+									"host": [
+										"localhost"
+									],
+									"port": "5000",
+									"path": [
+										"getUpdateInfo"
+									]
+								}
+							},
+							"_postman_previewlanguage": "Text",
+							"header": [],
+							"cookie": [],
+							"body": ""
+						},
+						{
+							"name": "Non-existing repo, non-forced",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/vnd.api+json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"AppInfo\": {\r\n        \"repoSlug\": \"T1nkR-Mesh-Name-Synchronizer-non-existing\",\r\n        \"currentVersion\": \"1.0.0\"\r\n    }\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "localhost:5000/getUpdateInfo",
+									"host": [
+										"localhost"
+									],
+									"port": "5000",
+									"path": [
+										"getUpdateInfo"
+									]
+								}
+							},
+							"_postman_previewlanguage": "Text",
+							"header": [],
+							"cookie": [],
+							"body": ""
+						},
+						{
+							"name": "Invalid version number",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/vnd.api+json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"AppInfo\": {\r\n        \"repoSlug\": \"T1nkR-Mesh-Name-Synchronizer\",\r\n        \"currentVersion\": \"1,0,0)\"\r\n    },\r\n    \"forceUpdateCheck\": true\r\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "localhost:5000/getUpdateInfo",
+									"host": [
+										"localhost"
+									],
+									"port": "5000",
+									"path": [
+										"getUpdateInfo"
+									]
+								}
+							},
+							"status": "BAD REQUEST",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Server",
+									"value": "Werkzeug/3.0.1 Python/3.10.11"
+								},
+								{
+									"key": "Date",
+									"value": "Sun, 11 Feb 2024 10:05:44 GMT"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "Content-Length",
+									"value": "108"
+								},
+								{
+									"key": "Connection",
+									"value": "close"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"error\": \"Invalid version in 'currentVersion' of 'AppInfo'. Version shall be specified as (x, y, z).\"\n}"
+						}
+					]
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "repo-slug",
+			"value": "T1nkR-Mesh-Name-Synchronizer",
+			"type": "string"
+		},
+		{
+			"key": "current-version",
+			"value": "1.0.0",
+			"type": "string"
+		},
+		{
+			"key": "github-root",
+			"value": "https://github.com/gusztavj/",
+			"type": "string"
+		},
+		{
+			"key": "force-update",
+			"value": "false",
+			"type": "string"
+		},
+		{
+			"key": "expected-status",
+			"value": "200",
+			"type": "string"
+		},
+		{
+			"key": "beyond-latest-version",
+			"value": ""
+		},
+		{
+			"key": "forced-check-timestamp",
+			"value": ""
+		},
+		{
+			"key": "another-repo-slug",
+			"value": "Custom-Object-Property-Manager",
+			"type": "string"
+		}
+	]
+}

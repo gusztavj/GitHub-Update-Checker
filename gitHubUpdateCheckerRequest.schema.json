@@ -2,7 +2,9 @@
     "$id": "https://github.com/gusztavj/GitHub-Update-Checker/blob/main/gitHubUpdateCheckerRequest.schema.json",
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "GitHub Update Checker Request Schema",
+    "description": "This JSON schema describes how the JSON body of your POST requests submitted to the /getUpdateInfo shall look like.",
     "type": "object",
+    
     "properties": {
 
       "appInfo": {

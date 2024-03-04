@@ -1,22 +1,25 @@
-# T1nk-R's GitHub Update Checker
-# - part of T1nk-R Utilities for Blender
+# T1nk-R's GitHub Update Checker // gitHubUpdateChecker.py
 #
-# Version: Please see the version tag under bl_info in __init__.py.
+# Version: Please appVersion below.
 #
-# This module is responsible for checking if updates are available.
+# This module is responsible for running the web server app for checking updates.
 #
-# Module and add-on authored by T1nk-R (https://github.com/gusztavj/)
+# Module authored by T1nk-R (https://github.com/gusztavj/)
 #
 # PURPOSE & USAGE *****************************************************************************************************************
-# You can use this add-on to synchronize the names of meshes with the names of their parent objects.
 #
-# Help, support, updates and anything else: https://github.com/gusztavj/T1nkR-Mesh-Name-Synchronizer
+# This Flask-based web server application works as a middleware or proxy between a Python module/application and GitHub and can
+# be used to perform checking for updates using your personal GitHub API key without disclosing it to the public and without
+# flooding GitHub. For the latter, this proxy stores fresh release (version) information in its cache and serves requests from
+# the cache until it expires or direct checking is forced.
+#
+# Help, support, updates and anything else: https://github.com/gusztavj/GitHub-Update-Checker/
 #
 # COPYRIGHT ***********************************************************************************************************************
 #
 # ** MIT License **
 # 
-# Copyright (c) 2023-2024, T1nk-R (Gusztáv Jánvári)
+# Copyright (c) 2024, T1nk-R (Gusztáv Jánvári)
 # 
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files
 # (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, 
@@ -37,13 +40,10 @@
 # other services you may need.
 #
 # DISCLAIMER **********************************************************************************************************************
-# This add-on is provided as-is. Use at your own risk. No warranties, no guarantee, no liability,
-# no matter what happens. Still I tried to make sure no weird things happen:
-#   * This add-on is intended to change the name of the meshes and other data blocks under your Blender objects.
-#   * This add-on is not intended to modify your objects and other Blender assets in any other way.
-#   * You shall be able to simply undo consequences made by this add-on.
+# This application is provided as-is. Use at your own risk. No warranties, no guarantee, no liability,
+# no matter what happens.
 #
-# You may learn more about legal matters on page https://github.com/gusztavj/T1nkR-Mesh-Name-Synchronizer
+# You may learn more about legal matters on page https://github.com/gusztavj/GitHub-Update-Checker/
 #
 # *********************************************************************************************************************************
 
@@ -86,6 +86,8 @@ from repository import RepositoryAccessManager, Repository, RepositoryStoreManag
 
 
 # Init stuff ======================================================================================================================
+appVersion = "1.0.0"
+
 sys.path.insert(0, os.path.dirname(__file__))
 
 dateTimeFormat = "%Y-%m-%d %H:%M:%S"
@@ -234,15 +236,24 @@ def before_request():
 # API Endpoints ###################################################################################################################
 
 # Test service endpoint ===========================================================================================================
-@app.get("/foo")
-def get_foo():
+@app.get("/info")
+def version():
     """
-    Test request
-
-    Returns: Something in a response, depending on its ever changing code :)
+    Returns verion information.
     """
-    app.config["x"] = app.config["x"] + 1
-    return jsonify(app.config["x"])
+    
+    about = {
+        "Application Name": "GitHub Update Checker by T1nk-R",
+        "Version": appVersion,
+        "Author": "T1nk-R (Gusztáv Jánvári)",
+        "Author's GitHub": "https://github.com/gusztavj/",
+        "Author's Website": "https://gusztav.janvari.name/",
+        "Author's Portfolio": "https://gusztav.janvari.name/t1nk-r/",
+        "Help and support": "https://github.com/gusztavj/GitHub-Update-Checker",        
+        "Updates": "https://github.com/gusztavj/GitHub-Update-Checker/releases"
+    }        
+    
+    return make_response(jsonify(about), 200)
 
 
 # Get update information ==========================================================================================================
