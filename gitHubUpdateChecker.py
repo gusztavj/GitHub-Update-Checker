@@ -481,7 +481,7 @@ def _getUpdateInfoFromGitHub(repoConn: RepositoryAccessManager) -> Response:
     return response
 
 # Parse request body received from user ===========================================================================================
-def _parseRequest(requestJson) -> tuple[bool, str, str]:
+def _parseRequest(requestJson: dict) -> tuple[bool, str, str]:
     """Parse the request JSON and extract relevant information.
 
     Args:
@@ -495,21 +495,38 @@ def _parseRequest(requestJson) -> tuple[bool, str, str]:
         customExceptions.RequestError: If there is an error parsing the request JSON.
 
     """
-    if "AppInfo" in requestJson.keys():
-        appInfoJson = requestJson["AppInfo"]
+    
+    if requestJson is None:
+        whatHappened = "No payload found in request. Don't know what to check."
+        raise RequestError(
+                responseCode=400,
+                responseMessage=whatHappened,
+                logEntries=[whatHappened],
+                innerException=None)
+
+    if not isinstance(requestJson, dict):
+        whatHappened = "Invalid payload found in request. Don't know what to check. Payload shall be a JSON compliant to the gitHubUpdateCheckerRequest.json schema"
+        raise RequestError(
+                responseCode=400,
+                responseMessage=whatHappened,
+                logEntries=[whatHappened],
+                innerException=None)
+
+    if "appInfo" in requestJson:
+        appInfoJson = requestJson["appInfo"]
         if "repoSlug" in appInfoJson.keys():
             repoSlug = Repository.ensureRepoSlug(repoSlugToSet=appInfoJson['repoSlug'], fromCustomerRequest=True)
             app.logger.info(f"Update check requested for repo: {repoSlug}")
         else:
-            whatHappened = "The 'repoSlug' key is missing from the 'AppInfo' object, can't find out which repo to check."
+            whatHappened = "The 'repoSlug' key is missing from the 'appInfo' object, can't find out which repo to check."
             raise RequestError(
                     responseCode=400,
                     responseMessage=whatHappened,
                     logEntries=[whatHappened],
                     innerException=None)
-        if "currentVersion" in appInfoJson.keys():           
+        if "currentVersion" in appInfoJson.keys():   
             clientCurrentVersion = appInfoJson["currentVersion"]
-            
+
             if len(clientCurrentVersion) == 0:
                 whatHappened = "The 'currentVersion' key is set to an empty string. A valid version number is expected."
                 raise RequestError(
@@ -518,16 +535,42 @@ def _parseRequest(requestJson) -> tuple[bool, str, str]:
                     logEntries=[whatHappened],
                     innerException=None)
 
+            try: # to parse to validate
+                cvTags = [int(t) for t in str.split(clientCurrentVersion, ".")]
+                
+                # Check how many segments it has                
+                if len(cvTags) != 3:
+                    whatHappened = f"Invalid version in 'currentVersion' of 'appInfo'. Version shall be specified as 'x.y.z' or 'x.y.z-foo'. Received '{clientCurrentVersion}'."
+                    raise RequestError(
+                        responseMessage=whatHappened,
+                        responseCode=400,
+                        logEntries=[whatHappened],
+                        innerException=err                
+                    )
+
+            except Exception as err:
+                if isinstance(err, RequestError):
+                    # It's us who raised and initialized it, let's just pass it on
+                    raise
+
+                whatHappened = f"Invalid version number in request: {clientCurrentVersion}"
+                raise RequestError(
+                    responseMessage="Invalid version in 'currentVersion' of 'appInfo'. Version shall be specified as 'x.y.z' or 'x.y.z-foo'.",
+                    responseCode=400,
+                    logEntries=[whatHappened],
+                    innerException=err                
+                ) from err
+                
             app.logger.info(f"Current version in request: {clientCurrentVersion}")
         else:
-            whatHappened = "The 'currentVersion' key missing from the 'AppInfo' object, would not be able to determine if there's a newer version."
+            whatHappened = "The 'currentVersion' key missing from the 'appInfo' object, would not be able to determine if there's a newer version."
             raise RequestError(
                     responseCode=400,
                     responseMessage=whatHappened,
                     logEntries=[whatHappened],
-                    innerException=None)                
+                    innerException=None)
     else:
-        whatHappened = "'AppInfo' key missing from request"
+        whatHappened = "'appInfo' key missing from request"
         raise RequestError(
                 responseCode=400,
                 responseMessage=whatHappened,
@@ -535,7 +578,7 @@ def _parseRequest(requestJson) -> tuple[bool, str, str]:
                 innerException=None)
 
         # Check force update setting
-    if "forceUpdateCheck" in requestJson.keys():
+    if "forceUpdateCheck" in requestJson:
         try:
             if isinstance(requestJson['forceUpdateCheck'], bool):
                 # Only process if it's bool
@@ -591,7 +634,7 @@ def _isUpdateAvailable(updateInfo: UpdateInfo, currentVersion: str) -> bool:
 
     # Get installed version (already stored as a list by Blender)
     try:
-        currentVersionTags = [int(t) for t in str.split(currentVersion[1:-1], ",")]
+        currentVersionTags = [int(t) for t in str.split(currentVersion, ".")]
 
         currentVersion = ".".join([str(i) for i in currentVersionTags])
 
@@ -617,7 +660,7 @@ def _isUpdateAvailable(updateInfo: UpdateInfo, currentVersion: str) -> bool:
     except Exception as err:
         whatHappened = f"Invalid version number in request: {currentVersion}" if currentVersion else "None was passed in the currentVersion argument of _isUpdateAvailable"
         raise RequestError(
-            responseMessage="Invalid version in 'currentVersion' of 'AppInfo'. Version shall be specified as (x, y, z).",
+            responseMessage="Invalid version in 'currentVersion' of 'appInfo'. Version shall be specified as 'x.y.z'.",
             responseCode=400,
             logEntries=[whatHappened],
             innerException=err                

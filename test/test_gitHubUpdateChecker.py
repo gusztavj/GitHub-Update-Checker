@@ -69,26 +69,27 @@ class Test_GetUpdateInfo:
         }
         
         requestBody = {
-            'AppInfo': {
+            'appInfo': {
                 'repoSlug': 'T1nkR-Mesh-Name-Synchronizer', 
-                'currentVersion': '(1,0,0)'
+                'currentVersion': '1.0.0'
             }, 
             'forceUpdateCheck': 'false'
         }
         
         url = '/getUpdateInfo'
 
-        response = client.post(url, data=json.dumps(requestBody), headers=headers)
+        response = client.post(url, json = requestBody, headers=headers)
 
         assert response.content_type == mimetype
         assert response.status_code == 200
-        assert response.json["repository"]["repoSlug"] == requestBody["AppInfo"]["repoSlug"]
+        assert response.json["repository"]["repoSlug"] == requestBody["appInfo"]["repoSlug"]
 
 
     #==============================================================================================================================
     # Perform a force-unforced-forced check to see if both work
     def test_forcing_flag(self, client):
         """
+        Check if forcing and non-forcing updates behave correctly.
         """
         
         mimetype = 'application/json'
@@ -98,17 +99,17 @@ class Test_GetUpdateInfo:
         }
         
         forcedCheckRequestBody = {
-            'AppInfo': {
+            'appInfo': {
                 'repoSlug': 'T1nkR-Mesh-Name-Synchronizer', 
-                'currentVersion': '(1,0,0)'
+                'currentVersion': '1.0.0'
             }, 
             'forceUpdateCheck': True
         }
         
         unforcedCheckRequestBody = {
-            'AppInfo': {
+            'appInfo': {
                 'repoSlug': 'T1nkR-Mesh-Name-Synchronizer', 
-                'currentVersion': '(1,0,0)'
+                'currentVersion': '1.0.0'
             }, 
             'forceUpdateCheck': False
         }
@@ -117,12 +118,12 @@ class Test_GetUpdateInfo:
 
         # First a forced check to get a fresh timestamp
 
-        response = client.post(url, data=json.dumps(forcedCheckRequestBody), headers=headers)
+        response = client.post(url, json = forcedCheckRequestBody, headers=headers)
 
         # Check that the call went as expected
         assert response.content_type == mimetype
         assert response.status_code == 200
-        assert response.json["repository"]["repoSlug"] == forcedCheckRequestBody["AppInfo"]["repoSlug"]
+        assert response.json["repository"]["repoSlug"] == forcedCheckRequestBody["appInfo"]["repoSlug"]
         
         firstForcedCheckTimestamp = response.json["repository"]["lastCheckedTimestamp"]
                 
@@ -131,12 +132,12 @@ class Test_GetUpdateInfo:
         
         # A non-forced check to expect the timestamp to not change
         
-        response = client.post(url, data=json.dumps(unforcedCheckRequestBody), headers=headers)
+        response = client.post(url, json = unforcedCheckRequestBody, headers=headers)
 
         # Check that the call went as expected
         assert response.content_type == mimetype
         assert response.status_code == 200
-        assert response.json["repository"]["repoSlug"] == unforcedCheckRequestBody["AppInfo"]["repoSlug"]
+        assert response.json["repository"]["repoSlug"] == unforcedCheckRequestBody["appInfo"]["repoSlug"]
         
         unForcedCheckTimestamp = response.json["repository"]["lastCheckedTimestamp"]
         
@@ -152,7 +153,7 @@ class Test_GetUpdateInfo:
         # Check expectations
         assert response.content_type == mimetype
         assert response.status_code == 200
-        assert response.json["repository"]["repoSlug"] == forcedCheckRequestBody["AppInfo"]["repoSlug"]
+        assert response.json["repository"]["repoSlug"] == forcedCheckRequestBody["appInfo"]["repoSlug"]
         
         secondForcedCheckTimestamp = response.json["repository"]["lastCheckedTimestamp"]
         
@@ -223,7 +224,7 @@ class Test_GetUpdateInfo:
         }
 
         requestBody = {
-            'AppInfo': {
+            'appInfo': {
                 'repoSlug': 'T1nkR-Mesh-Name-Synchronizer', 
                 'currentVersion': '(1,0,0)'
             }, 
@@ -258,7 +259,7 @@ class Test_isUpdateAvailable:
         updateInfo = UpdateInfo()
         updateInfo.repository = Repository('repoSlug')
         updateInfo.repository.latestVersion = "v2.0.0"
-        currentVersion = "(1, 0, 0)"
+        currentVersion = "1.0.0"
 
         # Act
         result = _isUpdateAvailable(updateInfo, currentVersion)
@@ -274,7 +275,7 @@ class Test_isUpdateAvailable:
         updateInfo = UpdateInfo()
         updateInfo.repository = Repository('repoSlug')
         updateInfo.repository.latestVersion = "v1.1.0"
-        currentVersion = "(1, 0, 0)"
+        currentVersion = "1.0.0"
 
         # Act
         result = _isUpdateAvailable(updateInfo, currentVersion)
@@ -290,7 +291,7 @@ class Test_isUpdateAvailable:
         updateInfo = UpdateInfo()
         updateInfo.repository = Repository('repoSlug')
         updateInfo.repository.latestVersion = "v1.0.1"
-        currentVersion = "(1, 0, 0)"
+        currentVersion = "1.0.0"
 
         # Act
         result = _isUpdateAvailable(updateInfo, currentVersion)
@@ -306,7 +307,7 @@ class Test_isUpdateAvailable:
         updateInfo = UpdateInfo()
         updateInfo.repository = Repository('repoSlug')
         updateInfo.repository.latestVersion = "v1.1.9"
-        currentVersion = "(2, 2, 2)"
+        currentVersion = "2.2.2"
 
         # Act
         result = _isUpdateAvailable(updateInfo, currentVersion)
@@ -322,7 +323,7 @@ class Test_isUpdateAvailable:
         updateInfo = UpdateInfo()
         updateInfo.repository = Repository('repoSlug')
         updateInfo.repository.latestVersion = "v2.1.9"
-        currentVersion = "(2, 2, 2)"
+        currentVersion = "2.2.2"
 
         # Act
         result = _isUpdateAvailable(updateInfo, currentVersion)
@@ -338,7 +339,7 @@ class Test_isUpdateAvailable:
         updateInfo = UpdateInfo()
         updateInfo.repository = Repository('repoSlug')
         updateInfo.repository.latestVersion = "v2.2.1"
-        currentVersion = "(2, 2, 2)"
+        currentVersion = "2.2.2"
 
         # Act
         result = _isUpdateAvailable(updateInfo, currentVersion)
@@ -353,7 +354,7 @@ class Test_isUpdateAvailable:
         updateInfo = UpdateInfo()
         updateInfo.repository = Repository('dummyRepoSlug')
         updateInfo.repository.latestVersion = "invalid format"
-        currentVersion = "(1, 0, 0)"
+        currentVersion = "1.0.0"
 
         # Act and Assert
         with pytest.raises(UpdateCheckingError):
@@ -366,7 +367,7 @@ class Test_isUpdateAvailable:
         updateInfo = UpdateInfo()
         updateInfo.repository = Repository('dummyRepoSlug')
         updateInfo.repository.latestVersion = ""
-        currentVersion = "(1, 0, 0)"
+        currentVersion = "1.0.0"
 
         # Act and Assert
         with pytest.raises(UpdateCheckingError):
@@ -416,7 +417,7 @@ class Test_isUpdateAvailable:
         """Expected to raise `UpdateCheckingError` as the `updateInfo` argument is None."""
         # Arrange
         updateInfo = None
-        currentVersion = "(1, 0, 0)"
+        currentVersion = "1.0.0"
 
         # Act and assert the proper exception
         with pytest.raises(UpdateCheckingError) as err:
@@ -434,7 +435,7 @@ class Test_isUpdateAvailable:
         # Arrange
         updateInfo = UpdateInfo()
         updateInfo.repository = None
-        currentVersion = "(1, 0, 0)"
+        currentVersion = "1.0.0"
 
         # Act and assert the proper exception
         with pytest.raises(UpdateCheckingError) as err:
@@ -454,16 +455,16 @@ class Test_parseRequest:
     # Happy path tests with various realistic test values
     @pytest.mark.parametrize("input_data, expected", [
         
-        ({"AppInfo": {"repoSlug": "validRepo", "currentVersion": "1.0.0"}, "forceUpdateCheck": True}, 
+        ({"appInfo": {"repoSlug": "validRepo", "currentVersion": "1.0.0"}, "forceUpdateCheck": True}, 
         (True, "validRepo", "1.0.0")),
         
-        ({"AppInfo": {"repoSlug": "anotherRepo", "currentVersion": "2.1.3"}, "forceUpdateCheck": False}, 
+        ({"appInfo": {"repoSlug": "anotherRepo", "currentVersion": "2.1.3"}, "forceUpdateCheck": False}, 
         (False, "anotherRepo", "2.1.3")),
         
-        ({"AppInfo": {"repoSlug": "repoWithNumbers123", "currentVersion": "0.0.1"}, "forceUpdateCheck": "true"}, 
+        ({"appInfo": {"repoSlug": "repoWithNumbers123", "currentVersion": "0.0.1"}, "forceUpdateCheck": "true"}, 
         (True, "repoWithNumbers123", "0.0.1")),
         
-        ({"AppInfo": {"repoSlug": "repoWithNumbers123", "currentVersion": "0.0.1"}, "forceUpdateCheck": "false"}, 
+        ({"appInfo": {"repoSlug": "repoWithNumbers123", "currentVersion": "0.0.1"}, "forceUpdateCheck": "false"}, 
         (False, "repoWithNumbers123", "0.0.1"))
     ])
     def test_parse_request_happy_path(self, input_data, expected):
@@ -486,25 +487,25 @@ class Test_parseRequest:
     #==============================================================================================================================
     # Edge case data        
     @pytest.mark.parametrize("input_data, expected", [        
-        ({"AppInfo": {"repoSlug": "validRepo", "currentVersion": "1.0.0"}, "forceUpdateCheck": True}, 
+        ({"appInfo": {"repoSlug": "validRepo", "currentVersion": "1.0.0"}, "forceUpdateCheck": True}, 
         (True, "validRepo", "1.0.0")),
         
-        ({"AppInfo": {"repoSlug": "anotherRepo", "currentVersion": "2.1.3"}, "forceUpdateCheck": False}, 
+        ({"appInfo": {"repoSlug": "anotherRepo", "currentVersion": "2.1.3"}, "forceUpdateCheck": False}, 
         (False, "anotherRepo", "2.1.3")),
         
-        ({"AppInfo": {"repoSlug": "repoWithNumbers123", "currentVersion": "0.0.1"}, "forceUpdateCheck": "true"}, 
+        ({"appInfo": {"repoSlug": "repoWithNumbers123", "currentVersion": "0.0.1"}, "forceUpdateCheck": "true"}, 
         (True, "repoWithNumbers123", "0.0.1")),
         
-        ({"AppInfo": {"repoSlug": "repoWithNumbers123", "currentVersion": "0.0.1"}, "forceUpdateCheck": "false"}, 
+        ({"appInfo": {"repoSlug": "repoWithNumbers123", "currentVersion": "0.0.1"}, "forceUpdateCheck": "false"}, 
         (False, "repoWithNumbers123", "0.0.1")),
                 
-        ({"AppInfo": {"repoSlug": "foo", "currentVersion": "1.0.0"}}, 
+        ({"appInfo": {"repoSlug": "foo", "currentVersion": "1.0.0"}}, 
         (False, "foo", "1.0.0")), # forceUpdateCheck missing
         
-        ({"AppInfo": {"repoSlug": "validRepo", "currentVersion": "1.0.0"}, "forceUpdateCheck": ""}, 
+        ({"appInfo": {"repoSlug": "validRepo", "currentVersion": "1.0.0"}, "forceUpdateCheck": ""}, 
         (False, "validRepo", "1.0.0")), # forceUpdateCheck empty string
         
-        ({"AppInfo": {"repoSlug": "validRepo", "currentVersion": "1.0.0"}, "forceUpdateCheck": "yes, please"}, 
+        ({"appInfo": {"repoSlug": "validRepo", "currentVersion": "1.0.0"}, "forceUpdateCheck": "yes, please"}, 
         (False, "validRepo", "1.0.0")), # forceUpdateCheck cannot be converted to bool
     ])
     def test_parse_request_edge_cases(self, input_data, expected):
@@ -529,18 +530,18 @@ class Test_parseRequest:
     # Data to produce errors
     @pytest.mark.parametrize("input_data, expected", [
         ({"forceUpdateCheck": True}, 
-        (RequestError, 400, "'AppInfo' key missing from request")),
+        (RequestError, 400, "'appInfo' key missing from request")),
         
-        ({"AppInfo": {"currentVersion": "1.0.0"}, "forceUpdateCheck": True}, 
-        (RequestError, 400, "The 'repoSlug' key is missing from the 'AppInfo' object, can't find out which repo to check.")),
+        ({"appInfo": {"currentVersion": "1.0.0"}, "forceUpdateCheck": True}, 
+        (RequestError, 400, "The 'repoSlug' key is missing from the 'appInfo' object, can't find out which repo to check.")),
         
-        ({"AppInfo": {"repoSlug": "", "currentVersion": "1.0.0"}, "forceUpdateCheck": True}, 
+        ({"appInfo": {"repoSlug": "", "currentVersion": "1.0.0"}, "forceUpdateCheck": True}, 
         (RequestError, 400, "The repo slug shall not be an empty string.")),
         
-        ({"AppInfo": {"repoSlug": "validRepo"}, "forceUpdateCheck": False}, 
-        (RequestError, 400, "The 'currentVersion' key missing from the 'AppInfo' object, would not be able to determine if there's a newer version.")),
+        ({"appInfo": {"repoSlug": "validRepo"}, "forceUpdateCheck": False}, 
+        (RequestError, 400, "The 'currentVersion' key missing from the 'appInfo' object, would not be able to determine if there's a newer version.")),
         
-        ({"AppInfo": {"repoSlug": "validRepo", "currentVersion": ""}, "forceUpdateCheck": False}, 
+        ({"appInfo": {"repoSlug": "validRepo", "currentVersion": ""}, "forceUpdateCheck": False}, 
         (RequestError, 400, "The 'currentVersion' key is set to an empty string. A valid version number is expected.")),
 
     ])    
@@ -651,9 +652,9 @@ class Test_checkUpdates:
     # Constants for test cases
     VALID_REPO_SLUG = "valid/repo"
     INVALID_REPO_SLUG = "invalid/repo"
-    CLIENT_SAME_VERSION = "(1,0,0)"
-    CLIENT_NEWER_VERSION = "(1,1,0)"
-    CLIENT_OLDER_VERSION = "(0,9,0)"
+    CLIENT_SAME_VERSION = "1.0.0"
+    CLIENT_NEWER_VERSION = "1.1.0"
+    CLIENT_OLDER_VERSION = "0.9.0"
     GITHUB_LATEST_VERSION = "v1.0.0"
 
 
@@ -667,7 +668,7 @@ class Test_checkUpdates:
     ])
     def test_check_updates_happy_path(self, test_id, force_update_check, repo_slug, client_version, latest_version, cache_expired, update_expected):
         # Arrange
-        with gitHubUpdateChecker.app.test_request_context(json={'forceUpdateCheck': force_update_check, 'AppInfo': {'repoSlug': repo_slug, 'currentVersion': client_version}}):
+        with gitHubUpdateChecker.app.test_request_context(json={'forceUpdateCheck': force_update_check, 'appInfo': {'repoSlug': repo_slug, 'currentVersion': client_version}}):
             with patch('repository.RepositoryStoreManager.getUpdateInfoFromRepoRepository') as mock_get_update_info:
                 update_info = UpdateInfo(Repository(repo_slug))
                 update_info.repository.latestVersion = latest_version
@@ -706,7 +707,7 @@ class Test_checkUpdates:
     ])
     def test_check_updates_edge_cases(self, test_id, force_update_check, repo_slug, client_version, latest_version, cache_expired, update_expected, expected_exception, expected_status_code, expected_message):
         # Arrange
-        with gitHubUpdateChecker.app.test_request_context(json={'forceUpdateCheck': force_update_check, 'AppInfo': {'repoSlug': repo_slug, 'currentVersion': client_version}}):
+        with gitHubUpdateChecker.app.test_request_context(json={'forceUpdateCheck': force_update_check, 'appInfo': {'repoSlug': repo_slug, 'currentVersion': client_version}}):
             with patch('repository.RepositoryStoreManager.getUpdateInfoFromRepoRepository') as mock_get_update_info:
                 update_info = UpdateInfo(Repository(repo_slug))
                 update_info.repository.latestVersion = latest_version
@@ -752,7 +753,7 @@ class Test_checkUpdates:
         """Expect the method to never fail but instead return a response referring to the nature of the error.
         """
         # Arrange
-        with gitHubUpdateChecker.app.test_request_context(json={'forceUpdateCheck': force_update_check, 'AppInfo': {'repoSlug': repo_slug, 'currentVersion': client_version}}):
+        with gitHubUpdateChecker.app.test_request_context(json={'forceUpdateCheck': force_update_check, 'appInfo': {'repoSlug': repo_slug, 'currentVersion': client_version}}):
             with patch('repository.RepositoryStoreManager.getUpdateInfoFromRepoRepository') as mock_get_update_info:
                 update_info = UpdateInfo(Repository(repo_slug))
                 update_info.repository.latestVersion = latest_version
