@@ -1,6 +1,6 @@
 {
     "$id": "https://github.com/gusztavj/GitHub-Update-Checker/blob/main/gitHubUpdateCheckerRequest.schema.json",
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "GitHub Update Checker Request Schema",
     "description": "This JSON schema describes how the JSON body of your POST requests submitted to the /getUpdateInfo shall look like.",
     "type": "object",
@@ -17,8 +17,9 @@
 
           "repoSlug": {
 
-            "description": "The slug of the repository form pattern of https://github.com/<username>/<repoSlug>/",
-            "type": "string"
+            "description": "The slug of the repository form pattern of https://github.com/<username>/<repoSlug>/. Only valid format accepted.",
+            "type": "string",
+            "pattern": "^/?[\\w\\d_][\\w\\d\\-_]*(/[\\w\\d\\-_]+)*/?$"
           },
 
           "currentVersion": {
@@ -33,7 +34,7 @@
       "forceUpdateCheck": {
 
         "description": "Force the update against GitHub or it is okay to be served from the cache. May be ignored by the server for security and performance considerations.",
-        "type": "bool"
+        "type": "boolean"
       }
     }
   }

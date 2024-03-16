@@ -1,0 +1,65 @@
+{
+    "$id": "https://github.com/gusztavj/GitHub-Update-Checker/blob/main/repository-store.schema.json",
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "GitHub Update Checker Repository Store Schema",
+    "description": "This JSON schema describes the structure of the repository store used as a cache for recent GitHub requests.",
+    "type": "array",    
+    "items": {
+        "$ref": "#/definitions/repoItem"
+    },
+
+    
+    "definitions": {
+
+        "repoItem": {
+            "title": "Blender Configuration",
+            "description":"Configuration for Blender necessary for exporting objects and taking screenshots.",
+            
+            "type": "object",            
+
+            "properties": {
+
+                "repoSlug": {
+                    "description": "The slug of the repository form pattern of https://github.com/<username>/<repoSlug>/. Only valid format accepted.",
+                    "type": "string",
+                    "pattern": "^/?[\\w\\d_][\\w\\d\\-_]*(/[\\w\\d\\-_]+)*/?$"
+                },
+
+                "checkFrequencyDays": {
+                    "description": "Frequency of checking for new updates (days).",
+                    "type": "integer"                    
+                },
+
+                "lastCheckedTimestamp": {
+                    "description": "Date and time of last successful check for updates.",
+                    "type": "string",
+                    "format": "date-time"
+                },
+
+                "latestVersion": {
+                    "description": "Version number of the latest release (the release tag from the repo) on GitHub. Follows vx.y.z-label format.",
+                    "type": "string"
+                },
+
+                "latestVersionName": {
+                    "description": "Name of the latest release on GitHub.",
+                    "type": "string"
+                },
+
+                "releaseUrl": {
+                    "description": "The URL to get the latest release",
+                    "type": "string",
+                    "format": "uri"
+                },
+
+                "repoUrl": {
+                    "description": "The URL of the repository",
+                    "type": "string",
+                    "format": "uri"
+                }        
+            },
+
+            "required": ["repoSlug", "checkFrequencyDays", "lastCheckedTimestamp", "latestVersion", "latestVersionName", "releaseUrl", "repoUrl"]
+        }
+    }
+}
