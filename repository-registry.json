@@ -1,5 +1,8 @@
 {
-    "supported-repositories": {
-        
-    }
+    "$schema": "https://raw.githubusercontent.com/gusztavj/GitHub-Update-Checker/main/repository-registry.schema.json",
+    "supported-repositories": [
+        "T1nkR-Mesh-Name-Synchronizer", 
+        "Custom-Object-Property-Manager",
+        "GitHub-Update-Checker-foo-bar"
+    ]
 }

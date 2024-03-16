@@ -206,6 +206,7 @@ def create_app(test_config=None):
 
     
     app.config["repoRepository"] = {}
+    app.config["repoRegistry"] = {}
     app.config["dateTimeFormat"] = dateTimeFormat
         
     # a simple page that says hello
@@ -381,7 +382,7 @@ def checkUpdates():
         with contextlib.suppress(Exception):
             errorKey = uuid.uuid4()
             
-            app.logger.exception(f"Error key {errorKey}. An {type(err).__name__} exception has been thrown.")
+            app.logger.exception(f"Error key {errorKey}: An {type(err).__name__} exception has been thrown.")
             app.logger.debug(f"Details: {err}")
                         
             responseJson = {"error": f"An internal error occurred. Mention the following error key when requesting support: {errorKey}"}
@@ -525,9 +526,18 @@ def _parseRequest(requestJson: dict) -> tuple[bool, str, str]:
 
     if "appInfo" in requestJson:
         appInfoJson = requestJson["appInfo"]
-        if "repoSlug" in appInfoJson.keys():
+        if "repoSlug" in appInfoJson.keys():                                    
             repoSlug = Repository.ensureRepoSlug(repoSlugToSet=appInfoJson['repoSlug'], fromCustomerRequest=True)
-            app.logger.info(f"Update check requested for repo: {repoSlug}")
+            
+            if RepositoryStoreManager.isRepoRegistered(repoSlug):            
+                app.logger.info(f"Update check requested for repo: {repoSlug}")
+            else:
+                whatHappened = f"The 'repoSlug' key specifies an unregistered repository '{repoSlug}'."
+                raise RequestError(
+                        responseCode=403,
+                        responseMessage=whatHappened,
+                        logEntries=[whatHappened],
+                        innerException=None)
         else:
             whatHappened = "The 'repoSlug' key is missing from the 'appInfo' object, can't find out which repo to check."
             raise RequestError(

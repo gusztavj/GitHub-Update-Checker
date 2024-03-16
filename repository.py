@@ -275,7 +275,7 @@ class Repository:
             raise EnvironmentError(
                 responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
                 responseCode=500,
-                logEntries=[f"Error key {errorKey}. Wanted to set check frequency but it's not number or not positive integer, but a {type(frequency).__name__}"]
+                logEntries=[f"Error key {errorKey}: Wanted to set check frequency but it's not number or not positive integer, but a {type(frequency).__name__}"]
             )
         
         self.checkFrequencyDays = frequency
@@ -309,7 +309,7 @@ class Repository:
             raise EnvironmentError(                
                 responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
                 responseCode=500,
-                logEntries=[f"Error key {errorKey}. Wanted to set update check timestamp but it's not a datetime object, but a {type(timestamp).__name__}"]
+                logEntries=[f"Error key {errorKey}: Wanted to set update check timestamp but it's not a datetime object, but a {type(timestamp).__name__}"]
             )
         
         self.lastCheckedTimestamp = timestamp
@@ -359,7 +359,7 @@ class Repository:
                 raise EnvironmentError(
                     responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
                     responseCode=500,
-                    logEntries=[f"Error key {errorKey}. Wanted to set a value of {type(repoSlugToSet).__name__} type as repo slug."]
+                    logEntries=[f"Error key {errorKey}: Wanted to set a value of {type(repoSlugToSet).__name__} type as repo slug."]
                 )
         
         if not repoSlugToSet:
@@ -375,7 +375,7 @@ class Repository:
                 raise EnvironmentError(
                     responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
                     responseCode=500,
-                    logEntries=[f"Error key {errorKey}. Wanted to set empty string as repo slug."]
+                    logEntries=[f"Error key {errorKey}: Wanted to set empty string as repo slug."]
                 )
         
         # URI (slug) format is: 
@@ -403,7 +403,7 @@ class Repository:
                 raise EnvironmentError(
                     responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
                     responseCode=500,
-                    logEntries=[f"Error key {errorKey}. Repo slug '{repoSlugToSet}' doesn't conform pattern."]
+                    logEntries=[f"Error key {errorKey}: Repo slug '{repoSlugToSet}' doesn't conform pattern."]
                 )
         
         # Make sure the property does not begin with a slash
@@ -463,21 +463,21 @@ class RepositoryEncoder(JSONEncoder):
                 raise EnvironmentError(
                     responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
                     responseCode=500,
-                    logEntries=[f"Error key {errorKey}. Variable 'app' in repository.py is not defined."]
+                    logEntries=[f"Error key {errorKey}: Variable 'app' in repository.py is not defined."]
                 )
             if app.config is None: 
                 errorKey = uuid.uuid4()
                 raise EnvironmentError(
                     responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
                     responseCode=500,
-                    logEntries=[f"Error key {errorKey}. The 'app' global variable in repository.py has no 'config' property"]
+                    logEntries=[f"Error key {errorKey}: The 'app' global variable in repository.py has no 'config' property"]
                 )
             if "dateTimeFormat" not in app.config.keys():
                 errorKey = uuid.uuid4()
                 raise EnvironmentError(
                     responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
                     responseCode=500,
-                    logEntries=[f"Error key {errorKey}. No 'dateTimeFormat' key in 'app.config' in repository.py"]
+                    logEntries=[f"Error key {errorKey}: No 'dateTimeFormat' key in 'app.config' in repository.py"]
                 )
                 
             return datetime.strftime(o, app.config["dateTimeFormat"])
@@ -489,7 +489,7 @@ class RepositoryEncoder(JSONEncoder):
             raise EnvironmentError(
                     responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
                     responseCode=500,
-                    logEntries=[ f"Error key {errorKey}. An object of the type '{type(o).__name__}' is passed to "  
+                    logEntries=[ f"Error key {errorKey}: An object of the type '{type(o).__name__}' is passed to "  
                                 + "RepositoryEncoder, and the encoder cannot encode it."]
                 )
     
@@ -530,7 +530,7 @@ class RepositoryDecoder(JSONDecoder):
             raise EnvironmentError(
                 responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
                 responseCode=500,
-                logEntries=[f"Error key {errorKey}. Could not decode repo store file for an error of {type(err).__name__}. Details: {err}"]
+                logEntries=[f"Error key {errorKey}: Could not decode repo store file for an error of {type(err).__name__}. Details: {err}"]
             ) from err
             
 
@@ -558,16 +558,25 @@ class RepositoryStoreManager:
     """
     
     # Private properties ==========================================================================================================
-    _repoStore: str = "repository-store.json"
+    _repoStoreFile: str = "repository-store.json"
     """File name of the repository store repository"""
     
-    _repoRepositoryKey: str = "repoRepository"
-    """The key in the JSON file containing repositories"""
+    _repoRegistryFile: str = "repository-registry.json"
+    """File name of the repository registry listing repo slugs to support/recognize."""
     
+    _repoRepositoryKey: str = "repoRepository"
+    """The key in the app config JSON and the repo store JSON file containing repositories"""
+    
+    _repoRegistryKey: str = "repoRegistry"
+    """The key in the app config JSON containing the list of supported repositories"""
+
+    _supportedRepositories: List[str] = []
+    """This list of supported repositories as read from the file referenced in `_repoRegistry`"""        
     
     # Public properties ===========================================================================================================
+    
     repoStore: RepositoryStore = RepositoryStore()
-    """The managed repository store."""
+    """The managed repository store."""        
         
     # Private functions ===========================================================================================================
 
@@ -585,13 +594,15 @@ class RepositoryStoreManager:
 
         """
         RepositoryStoreManager.repoStore = RepositoryStore()
-        repoDict = app.config[RepositoryStoreManager._repoRepositoryKey]
+        registeredRepoDict = app.config[RepositoryStoreManager._repoRegistryKey]
+        cachedRepoDict = app.config[RepositoryStoreManager._repoRepositoryKey]
+        
 
         stagingRepoStore: RepositoryStore = RepositoryStore()
 
-        for encodedRepo in repoDict:            
-            repo = RepositoryDecoder.decode(encodedRepo)
-            if repo is not None:
+        for encodedRepo in cachedRepoDict:            
+            repo = RepositoryDecoder.decode(encodedRepo)            
+            if repo is not None and repo.repoSlug in registeredRepoDict: # the repo is valid and supported                
                 stagingRepoStore.append(repo)
             
         # Getting here means no exception has been thrown, so it's safe to finalize the staging container
@@ -600,11 +611,13 @@ class RepositoryStoreManager:
     # Load repository of known GitHub repositories --------------------------------------------------------------------------------
     @staticmethod
     def _loadRepoRepository() -> RepositoryStore:
-        """Load repository of known GitHub repositories and populate into app.config["repoRepository"]"""
+        """Load repository of known GitHub repositories and populate into `app.config["repoRepository"]`"""
         
         if RepositoryStoreManager.repoStore is not None and len(RepositoryStoreManager.repoStore) > 0:
             # Already loaded
             return
+        
+        RepositoryStoreManager._loadRepositoryRegistry()
         
         if RepositoryStoreManager._repoRepositoryKey not in app.config.keys() or len(app.config[RepositoryStoreManager._repoRepositoryKey].keys()) == 0: 
             # No repository loaded or it's empty
@@ -612,17 +625,15 @@ class RepositoryStoreManager:
             # Try to open repo repository file ----------------------------------------------------------------------------------------
             repoRepository = {}
             
-            if os.path.exists(RepositoryStoreManager._repoStore) and os.path.isfile(RepositoryStoreManager._repoStore):    
+            if os.path.exists(RepositoryStoreManager._repoStoreFile) and os.path.isfile(RepositoryStoreManager._repoStoreFile):    
                 try:
-                    with open(RepositoryStoreManager._repoStore) as f:
+                    with open(RepositoryStoreManager._repoStoreFile) as f:
                         repoRepository = json.load(f)
                         
                     app.config[RepositoryStoreManager._repoRepositoryKey] = repoRepository
                     
-                    RepositoryStoreManager._populateRepositoryStore()
-                    
                 except Exception as ex:
-                    app.logger.error(f"Could not open repo repository '{RepositoryStoreManager._repoStore}' for an error of {type(ex).__name__}: {ex}")            
+                    app.logger.error(f"Could not open repo repository '{RepositoryStoreManager._repoStoreFile}' for an error of {type(ex).__name__}: {ex}")            
                     # Do not reset app.config["repoRepository"], it may contain some not too old information, better than nothing
                     
                     # Fail silently
@@ -632,6 +643,36 @@ class RepositoryStoreManager:
         
         return RepositoryStoreManager.repoStore
     
+    # Load list of registered and hence supported repositories --------------------------------------------------------------------
+    def _loadRepositoryRegistry() -> None:
+        """Load list of registered and hence supported repositories.
+
+        Raises:
+            EnvironmentError: If the registry cannot be loaded.
+        """
+        
+        if RepositoryStoreManager._repoRegistryKey in app.config and len(app.config[RepositoryStoreManager._repoRegistryKey]) > 0:
+            # Repository registry already loaded, return
+            return
+        
+        # Load list of supported repositories
+        if os.path.exists(RepositoryStoreManager._repoRegistryFile) and os.path.isfile(RepositoryStoreManager._repoRegistryFile):
+            try:
+                repoList = {}
+                
+                with open (RepositoryStoreManager._repoRegistryFile) as f:
+                    repoList = json.load(f)
+                
+                app.config[RepositoryStoreManager._repoRegistryKey] = repoList['supported-repositories']
+            except Exception as ex:
+                whatHappened: str = f"Could not load repository registry '{RepositoryStoreManager._repoStoreFile}' for an error of {type(ex).__name__}: {ex}"
+                errorKey = uuid.SafeUUID
+                raise EnvironmentError(
+                    responseMessage=f"An internal error occurred. Mention the following error key when requesting support: {errorKey}",
+                    responseCode=500,
+                    logEntries=[f"Error key {errorKey}: {whatHappened}"]
+                ) from ex
+                        
     
     # Public functions ============================================================================================================
     
@@ -650,6 +691,15 @@ class RepositoryStoreManager:
         
         # Fix repo slug if necessary
         repoSlug = Repository.ensureRepoSlug(repoSlug)
+        
+        # Deny requests for non-registered repositories
+        if repoSlug not in app.config[RepositoryStoreManager._repoRegistryKey]:
+            whatHappened: str = f"Unregistered repository '{repoSlug}' in request."
+            raise RequestError(
+                responseMessage=whatHappened,
+                responseCode=400,
+                logEntries=[whatHappened]
+            )
         
         # Load repos from store on demand        
         RepositoryStoreManager._loadRepoRepository()
@@ -677,12 +727,33 @@ class RepositoryStoreManager:
         """Save repository of known GitHub repositories"""
         
         try:
-            with open(RepositoryStoreManager._repoStore, "w") as f:
-                f.write(json.dumps(RepositoryStoreManager.repoStore, cls=RepositoryEncoder, indent=4))
-        except Exception as ex:
-            app.logger.error(f"Could not save repo repository '{RepositoryStoreManager._repoStore}' for an error of {type(ex).__name__}: {ex}")
-            
+            # Filter for supported repositories to make sure no unsupported repository is saved
+            supportedRepositories = [repo for repo in RepositoryStoreManager.repoStore if RepositoryStoreManager.isRepoRegistered(repo)]
 
+            with open(RepositoryStoreManager._repoStoreFile, "w") as f:
+                f.write(json.dumps(supportedRepositories, cls=RepositoryEncoder, indent=4))
+        except Exception as ex:
+            app.logger.error(f"Could not save repo repository '{RepositoryStoreManager._repoStoreFile}' for an error of {type(ex).__name__}: {ex}")
+            
+    # Tell if a given repository is registered (supported) ------------------------------------------------------------------------
+    @staticmethod
+    def isRepoRegistered(repoSlug: str) -> bool:
+        """Tell if a given repository is registered (supported).
+
+        Args:
+            repoSlug (str): The repository to check if it is supported and hence registered.
+
+        Returns:
+            bool: True if the repository can be checked (is supported), False otherwise.
+        """
+        
+        # Make sure the format is correct
+        repoSlugToCheck = Repository.ensureRepoSlug(repoSlug)
+        
+        # Load the registry        
+        RepositoryStoreManager._loadRepositoryRegistry()
+            
+        return RepositoryStoreManager._repoRegistryKey in app.config and repoSlugToCheck in app.config[RepositoryStoreManager._repoRegistryKey]
 
 # Structured update info **********************************************************************************************************
 @dataclass
