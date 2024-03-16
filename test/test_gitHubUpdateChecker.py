@@ -522,8 +522,11 @@ class Test_parseRequest:
         Returns:
             None
         """
+        
         # Act
-        result = _parseRequest(input_data)
+        with patch('repository.RepositoryStoreManager.isRepoRegistered') as mock_is_repo_registered:
+            mock_is_repo_registered.return_value = True
+            result = _parseRequest(input_data)
 
         # Assert
         assert result == expected
@@ -551,6 +554,7 @@ class Test_parseRequest:
         
         ({"appInfo": {"repoSlug": "validRepo", "currentVersion": "1.0.0"}, "forceUpdateCheck": "yes, please"}, 
         (False, "validRepo", "1.0.0")), # forceUpdateCheck cannot be converted to bool
+        
     ])
     def test_parse_request_edge_cases(self, input_data, expected):
         """
@@ -563,33 +567,41 @@ class Test_parseRequest:
         Returns:
             None
         """
+        with patch('repository.RepositoryStoreManager.isRepoRegistered') as mock_is_repo_registered:
+            mock_is_repo_registered.return_value = True
+            result = _parseRequest(input_data)
         
-        # Act
-        result = _parseRequest(input_data)
-
-        # Assert
         assert result == expected
 
     #==============================================================================================================================
     # Data to produce errors
-    @pytest.mark.parametrize("input_data, expected", [
+    @pytest.mark.parametrize("input_data, expected, isRepoRegistered", [
         ({"forceUpdateCheck": True}, 
-        (RequestError, 400, "'appInfo' key missing from request")),
+        (RequestError, 400, "'appInfo' key missing from request"), 
+        True),
         
         ({"appInfo": {"currentVersion": "1.0.0"}, "forceUpdateCheck": True}, 
-        (RequestError, 400, "The 'repoSlug' key is missing from the 'appInfo' object, can't find out which repo to check.")),
+        (RequestError, 400, "The 'repoSlug' key is missing from the 'appInfo' object, can't find out which repo to check."), 
+        True),
         
         ({"appInfo": {"repoSlug": "", "currentVersion": "1.0.0"}, "forceUpdateCheck": True}, 
-        (RequestError, 400, "The repo slug shall not be an empty string.")),
+        (RequestError, 400, "The repo slug shall not be an empty string."), 
+        True),
         
         ({"appInfo": {"repoSlug": "validRepo"}, "forceUpdateCheck": False}, 
-        (RequestError, 400, "The 'currentVersion' key missing from the 'appInfo' object, would not be able to determine if there's a newer version.")),
+        (RequestError, 400, "The 'currentVersion' key missing from the 'appInfo' object, would not be able to determine if there's a newer version."), 
+        True),
         
         ({"appInfo": {"repoSlug": "validRepo", "currentVersion": ""}, "forceUpdateCheck": False}, 
-        (RequestError, 400, "The 'currentVersion' key is set to an empty string. A valid version number is expected.")),
+        (RequestError, 400, "The 'currentVersion' key is set to an empty string. A valid version number is expected."), 
+        True),
+        
+        ({"appInfo": {"repoSlug": "validRepo", "currentVersion": ""}, "forceUpdateCheck": False}, 
+        (RequestError, 403, "The 'repoSlug' key specifies an unregistered repository"), 
+        False),
 
     ])    
-    def test_parse_request_error_cases(self, input_data, expected):
+    def test_parse_request_error_cases(self, input_data, expected, isRepoRegistered):
         """
         Test the error cases of the `parse_request` function.
 
@@ -602,7 +614,10 @@ class Test_parseRequest:
         """
         
         with pytest.raises(expected_exception=expected[0]) as err:
-            _parseRequest(input_data)
+            
+            with patch('repository.RepositoryStoreManager.isRepoRegistered') as mock_is_repo_registered:
+                mock_is_repo_registered.return_value = isRepoRegistered
+                _parseRequest(input_data)
 
         # Assert the response code and the exception message is expected
         assert err.value.responseCode == expected[1]
@@ -723,19 +738,22 @@ class Test_checkUpdates:
 
                     with patch('repository.RepositoryStoreManager.saveRepoRepository') as mock_save_repo_repository:
                         mock_save_repo_repository.return_value = None
+                        
+                        with patch('repository.RepositoryStoreManager.isRepoRegistered') as mock_is_repo_registered:
+                            mock_is_repo_registered.return_value = True
 
-                        with patch('gitHubUpdateChecker._getUpdateInfoFromGitHub') as mock_get_update_info_from_github:
-                            mock_get_update_info_from_github.return_value = MagicMock()
+                            with patch('gitHubUpdateChecker._getUpdateInfoFromGitHub') as mock_get_update_info_from_github:
+                                mock_get_update_info_from_github.return_value = MagicMock()
 
-                            with patch('gitHubUpdateChecker._populateUpdateInfoFromGitHubResponse') as mock_populate_update_info:
-                                mock_populate_update_info.return_value = None
+                                with patch('gitHubUpdateChecker._populateUpdateInfoFromGitHubResponse') as mock_populate_update_info:
+                                    mock_populate_update_info.return_value = None
 
-                                # Act
-                                response = checkUpdates()
+                                    # Act
+                                    response = checkUpdates()
 
-                                # Assert
-                                assert response.status_code == 200
-                                assert response.json['updateAvailable'] == update_expected
+                                    # Assert
+                                    assert response.status_code == 200
+                                    assert response.json['updateAvailable'] == update_expected
 
     #==============================================================================================================================                            
     # Data and test for edge cases
@@ -762,26 +780,29 @@ class Test_checkUpdates:
 
                     with patch('repository.RepositoryStoreManager.saveRepoRepository') as mock_save_repo_repository:
                         mock_save_repo_repository.return_value = None
+                        
+                        with patch('repository.RepositoryStoreManager.isRepoRegistered') as mock_is_repo_registered:
+                            mock_is_repo_registered = True
 
-                        with patch('gitHubUpdateChecker._getUpdateInfoFromGitHub') as mock_get_update_info_from_github:
-                            mock_get_update_info_from_github.return_value = MagicMock()
+                            with patch('gitHubUpdateChecker._getUpdateInfoFromGitHub') as mock_get_update_info_from_github:
+                                mock_get_update_info_from_github.return_value = MagicMock()
 
-                            with patch('gitHubUpdateChecker._populateUpdateInfoFromGitHubResponse') as mock_populate_update_info:                            
-                                mock_populate_update_info.return_value = None
-                                
-                                with patch('repository.Repository.getLastCheckedTimestamp') as mock_getLastCheckedTimestamp:
-                                    mock_getLastCheckedTimestamp.return_value = datetime(1980, 1, 1) if cache_expired else datetime.now()                                
-
-                                    # Act
-                                    response = checkUpdates()
+                                with patch('gitHubUpdateChecker._populateUpdateInfoFromGitHubResponse') as mock_populate_update_info:                            
+                                    mock_populate_update_info.return_value = None
                                     
-                                    # Assert
-                                    if expected_exception is None:                            
-                                        assert response.status_code == 200
-                                        assert response.json['updateAvailable'] == update_expected
-                                    else:
-                                        assert response.status_code == expected_status_code
-                                        assert expected_message in response.get_json()["error"]
+                                    with patch('repository.Repository.getLastCheckedTimestamp') as mock_getLastCheckedTimestamp:
+                                        mock_getLastCheckedTimestamp.return_value = datetime(1980, 1, 1) if cache_expired else datetime.now()                                
+
+                                        # Act
+                                        response = checkUpdates()
+                                        
+                                        # Assert
+                                        if expected_exception is None:                            
+                                            assert response.status_code == 200
+                                            assert response.json['updateAvailable'] == update_expected
+                                        else:
+                                            assert response.status_code == expected_status_code
+                                            assert expected_message in response.get_json()["error"]
 
 
     #==============================================================================================================================

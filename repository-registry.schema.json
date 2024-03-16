@@ -1,5 +1,5 @@
 {
-    "$id": "https://github.com/gusztavj/GitHub-Update-Checker/blob/main/repository-registry.schema.json",
+    "$id": "https://raw.githubusercontent.com/gusztavj/GitHub-Update-Checker/main/repository-registry.schema.json",
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "GitHub Update Checker Repository Registry Schema",
     "description": "This JSON schema describes the structure of the repository registry, the list of repositories to be supported by the service instance.",
