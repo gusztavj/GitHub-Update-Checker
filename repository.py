@@ -622,7 +622,7 @@ class RepositoryStoreManager:
         if RepositoryStoreManager._repoRepositoryKey not in app.config.keys() or len(app.config[RepositoryStoreManager._repoRepositoryKey].keys()) == 0: 
             # No repository loaded or it's empty
         
-            # Try to open repo repository file ----------------------------------------------------------------------------------------
+            # Try to open repository store file ----------------------------------------------------------------------------------------
             repoRepository = {}
             
             if os.path.exists(RepositoryStoreManager._repoStoreFile) and os.path.isfile(RepositoryStoreManager._repoStoreFile):    
@@ -633,7 +633,7 @@ class RepositoryStoreManager:
                     app.config[RepositoryStoreManager._repoRepositoryKey] = repoRepository
                     
                 except Exception as ex:
-                    app.logger.error(f"Could not open repo repository '{RepositoryStoreManager._repoStoreFile}' for an error of {type(ex).__name__}: {ex}")            
+                    app.logger.error(f"Could not open repository store '{RepositoryStoreManager._repoStoreFile}' for an error of {type(ex).__name__}: {ex}")            
                     # Do not reset app.config["repoRepository"], it may contain some not too old information, better than nothing
                     
                     # Fail silently
@@ -733,7 +733,7 @@ class RepositoryStoreManager:
             with open(RepositoryStoreManager._repoStoreFile, "w") as f:
                 f.write(json.dumps(supportedRepositories, cls=RepositoryEncoder, indent=4))
         except Exception as ex:
-            app.logger.error(f"Could not save repo repository '{RepositoryStoreManager._repoStoreFile}' for an error of {type(ex).__name__}: {ex}")
+            app.logger.error(f"Could not save repository store to '{RepositoryStoreManager._repoStoreFile}' for an error of {type(ex).__name__}: {ex}")
             
     # Tell if a given repository is registered (supported) ------------------------------------------------------------------------
     @staticmethod

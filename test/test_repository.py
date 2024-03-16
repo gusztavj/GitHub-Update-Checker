@@ -48,7 +48,9 @@
 # Standard libraries --------------------------------------------------------------------------------------------------------------
 import datetime
 import re
+import json
 import pytest
+from unittest.mock import patch, mock_open, MagicMock
 
 # Standard library elements -------------------------------------------------------------------------------------------------------
 from datetime import datetime
@@ -59,6 +61,7 @@ import customExceptions
 
 from repository import *
 from gitHubUpdateChecker import *
+from customExceptions import *
 
 # Tests for the RepositoryAccessManager class #####################################################################################
 class TestRepositoryAccessManager:
@@ -356,9 +359,9 @@ class TestRepositoryStore:
 class TestRepositoryStoreManager:
 
     #==============================================================================================================================
-    # Populating the repository store from the repository repository with valid data should result in the 'RepositoryStoreManager.repos' property being populated with 'Repository' objects.
+    # Populating the repository store from the repository store file with valid data should result in the 'RepositoryStoreManager.repos' property being populated with 'Repository' objects.
     def test_populate_repository_store_with_valid_data(self):
-        """Populating the repository store from the repository repository with valid data should result in the 'RepositoryStoreManager.repos' property being populated with 'Repository' objects."""
+        """Populating the repository store from the repository store file with valid data should result in the 'RepositoryStoreManager.repos' property being populated with 'Repository' objects."""
         
         # Initialize Flask app
         app = Flask(__name__)
@@ -385,22 +388,77 @@ class TestRepositoryStoreManager:
                     "repoUrl": "https://github.com/user/repo2"
                 }
         ]
+        
+        app.config[RepositoryStoreManager._repoRegistryKey] = ["user/repo1", "user/repo2"]
             
 
         # Set app reference in Repository class
         repository.app = app
 
-        # Load serialized repo store
-        RepositoryStoreManager._populateRepositoryStore()
+        with patch('repository.RepositoryStoreManager.isRepoRegistered') as mock_is_repo_registered:
+            mock_is_repo_registered.return_value = True
+        
+            # Load serialized repo store
+            RepositoryStoreManager._populateRepositoryStore()
 
         # Assert that the repository store is populated with Repository objects
         assert isinstance(RepositoryStoreManager.repoStore, RepositoryStore)
         assert all(isinstance(repo, Repository) for repo in RepositoryStoreManager.repoStore)
+        
+    #==============================================================================================================================
+    # Populating the repository store from the repository store file with valid data should result in the 
+    # 'RepositoryStoreManager.repos' property being populated with 'Repository' objects.
+    def test_populate_repository_store_with_no_more_supported_repo(self):
+        """Populating the repository store from the repository store file with valid data should result in the 
+        'RepositoryStoreManager.repos' property being populated with 'Repository' objects."""
+        
+        # Initialize Flask app
+        app = Flask(__name__)
+
+        # Set app configuration
+        app.config["dateTimeFormat"] = "%Y-%m-%d %H:%M:%S"
+        app.config["repoRepository"] = [
+                {
+                    "repoSlug": "user/repo1",
+                    "checkFrequencyDays": 7,
+                    "latestVersion": "1.0.0",
+                    "latestVersionName": "Release 1.0.0",
+                    "lastCheckedTimestamp": "2022-01-01 12:00:00",
+                    "releaseUrl": "https://github.com/user/repo1/releases/latest",
+                    "repoUrl": "https://github.com/user/repo1"
+                },
+                {
+                    "repoSlug": "user/repo2",
+                    "checkFrequencyDays": 3,
+                    "latestVersion": "2.0.0",
+                    "latestVersionName": "Release 2.0.0",
+                    "lastCheckedTimestamp": "2022-01-01 12:00:00",
+                    "releaseUrl": "https://github.com/user/repo2/releases/latest",
+                    "repoUrl": "https://github.com/user/repo2"
+                }
+        ]
+        
+        app.config[RepositoryStoreManager._repoRegistryKey] = ["user/repo1"]
+
+        # Set app reference in Repository class
+        repository.app = app
+        
+        # Load serialized repo store
+        RepositoryStoreManager._populateRepositoryStore()
+
+        # Assert that the repository store is of the proper type and is populated with Repository objects
+        assert isinstance(RepositoryStoreManager.repoStore, RepositoryStore)
+        assert all(isinstance(repo, Repository) for repo in RepositoryStoreManager.repoStore)
+        
+        # Assert that the non-registered repo is not loaded
+        assert len(RepositoryStoreManager.repoStore) == 1
+        assert RepositoryStoreManager.repoStore[0].repoSlug == app.config["repoRepository"][0]["repoSlug"]
+        
     
     #==============================================================================================================================
-    # Populating the repository store from the repository repository with invalid data should result in the 'RepositoryStoreManager.repos' property being empty.
+    # Populating the repository store from the repository store file with invalid data should result in the 'RepositoryStoreManager.repos' property being empty.
     def test_populate_repository_store_with_invalid_data(self):
-        """Populating the repository store from the repository repository with invalid data should result in the 'RepositoryStoreManager.repos' property being empty."""
+        """Populating the repository store from the repository store file with invalid data should result in the 'RepositoryStoreManager.repos' property being empty."""
         
         # Initialize Flask app
         app = Flask(__name__)
@@ -437,24 +495,126 @@ class TestRepositoryStoreManager:
                 }
         ]
 
-
+        app.config[RepositoryStoreManager._repoRegistryKey] = ["user/repo1", "user/repo2", "user/repo3"]
+        
         # Set app reference in Repository class
         repository.app = app
+        with patch('repository.RepositoryStoreManager.isRepoRegistered') as mock_is_repo_registered:
+            mock_is_repo_registered.return_value = True
+            
+            with pytest.raises(EnvironmentError) as err:
+                # Load serialized repo store
+                RepositoryStoreManager._populateRepositoryStore()
 
-        with pytest.raises(EnvironmentError) as err:
-            # Load serialized repo store
-            RepositoryStoreManager._populateRepositoryStore()
-
-            # Assert the proper exception is thrown
-            assert any(
-                True
-                for tb in err._traceback
-                if "Could not decode repo store file for an error of" in str(tb)
-            )
+                # Assert the proper exception is thrown
+                assert any(
+                    True
+                    for tb in err._traceback
+                    if "Could not decode repo store file for an error of" in str(tb)
+                )
                 
 
         # Assert that the repository store is empty
         assert len(RepositoryStoreManager.repoStore) == 0
+
+
+    def test_loadRepositoryRegistry_happy_path(self):
+        # Constants for tests
+        SUPPORTED_REPOSITORIES = ["repo1", "repo2", "repo3"]
+        EXTRA_REPOSITORY = ["repo4"]
+
+        # Arrange    
+        app.config[RepositoryStoreManager._repoRegistryKey] = []
+        repository.app = app
+        with patch("repository.os.path.exists", return_value=True):
+            with patch("repository.os.path.isfile", return_value=True):
+                with patch("builtins.open", mock_open(read_data=json.dumps({"supported-repositories": SUPPORTED_REPOSITORIES}))):
+
+                    RepositoryStoreManager._loadRepositoryRegistry()
+
+                    # Assert items are loaded as the list was empty
+                    assert len(app.config[RepositoryStoreManager._repoRegistryKey]) == len(SUPPORTED_REPOSITORIES)
+                    
+                    with patch("builtins.open", mock_open(read_data=json.dumps({"supported-repositories": EXTRA_REPOSITORY}))):
+                        RepositoryStoreManager._loadRepositoryRegistry()
+
+                        # Assert the length is the same, no new item was loaded
+                        assert len(app.config[RepositoryStoreManager._repoRegistryKey]) == len(SUPPORTED_REPOSITORIES)
+
+        loadRepoRepo_edge_case_data = [
+        # Add edge case scenarios here
+    ]
+
+    
+    @pytest.mark.parametrize("test_id, exception, error_message", 
+    [
+        ("EC001", OSError, "Could not load repository registry"),  # OSError when opening file
+        ("EC002", json.JSONDecodeError, "JSONDecodeError"),  # JSON decode error
+    ])
+    def test_loadRepositoryRegistry_error_cases(self, test_id, exception, error_message):
+        SUPPORTED_REPOSITORIES = ["repo1", "repo2", "repo3"]
+        
+        # Arrange
+        with patch("repository.app") as mock_app:
+            mock_app.config = {}
+            with patch("repository.os.path.exists", return_value=True):
+                with patch("repository.os.path.isfile", return_value=True):
+                    with patch("builtins.open", mock_open(read_data=json.dumps({"supported-repositories": SUPPORTED_REPOSITORIES}))) as mock_file:
+                        mock_file.side_effect = exception
+
+                        # Act & Assert
+                        with pytest.raises(EnvironmentError) as exc_info:
+                            RepositoryStoreManager._loadRepositoryRegistry()
+                        assert exc_info.value.responseCode == 500
+                        assert "An internal error occurred. Mention the following error key when requesting support:" in exc_info.value.responseMessage
+                        assert error_message in str(exc_info.value.logEntries)
+
+
+# Assuming RepositoryStoreManager and RepositoryEncoder are defined in repository.py
+
+    @pytest.mark.parametrize("test_id, repo_store, repo_registry, expected_output, expected_exception, expected_message", [
+        # Happy path tests
+        ("happy-1", ["repo1", "repo2"], ["repo1", "repo2"], '[\n    "repo1",\n    "repo2"\n]', None, ""),
+        ("happy-2", ["repo1", "repo2"], ["repo1"], '[\n    "repo1"\n]', None, ""),
+        ("happy-3", [], [], '[]', None, ""),
+        
+        # Edge cases
+        ("edge-1", ["repo1"], ["repo1"], '[\n    "repo1"\n]', None, ""),
+        
+        # Error cases
+        ("error-1", ["repo1"], ["repo1"], None, IOError, "Failed to open file for writing"),
+    ])
+    def test_saveRepoRepository(self, test_id, repo_store, repo_registry, expected_output, expected_exception, expected_message):
+        
+        def mock_isRepoRegistered(*args, **kwargs):
+            return args[0] in repo_registry
+            
+        # Arrange
+        RepositoryStoreManager.repoStore = repo_store
+        RepositoryStoreManager._repoStoreFile = "repo_store.json"
+        m_open = mock_open()
+
+        # Act        
+        with patch("builtins.open", m_open):
+            if expected_exception:
+                # Mock app.logger.error
+                logger_mock = MagicMock()
+                with patch("repository.app.logger.error", logger_mock):
+                    with patch.object(RepositoryStoreManager, "isRepoRegistered", side_effect=mock_isRepoRegistered):
+                        m_open.side_effect = OSError("Failed to open file for writing")                        
+                        RepositoryStoreManager.saveRepoRepository()
+                    
+                    logMessageFound = any("Could not save repository store to 'repo_store.json' for an error of OSError: Failed to open file for writing" in call_args[0] for call_args in logger_mock.call_args_list)
+                    assert logMessageFound, "The heading of the log entry about the exception during repository store saving is missing"
+                    
+            else:
+                with patch.object(RepositoryStoreManager, "isRepoRegistered", side_effect=mock_isRepoRegistered):
+                    RepositoryStoreManager.saveRepoRepository()
+                    
+                m_open.assert_called_once_with("repo_store.json", "w")
+                m_open().write.assert_called_once_with(expected_output)
+
+
 
 # Tests for the UpdateInfo class ##################################################################################################
 class TestUpdateInfo:
