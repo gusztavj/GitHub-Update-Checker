@@ -183,19 +183,19 @@ def create_app(test_config=None):
     
     # Try to read configured log level or fall back to a default one
     try:
-        requestedLevel = eval(os.environ.get("LOG_LEVEL"))        
+        requestedLevel = eval(os.environ.get("GITHUB_UPDATE_CHECKER_LOG_LEVEL"))
         
         if requestedLevel in [logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR, logging.CRITICAL]:
             app.logger.setLevel(requestedLevel)            
         else:
             app.logger.setLevel(logging.INFO)
             makeANoteOnLogging = True
-            logWhat = f"LOG_LEVEL set to {os.environ.get('LOG_LEVEL')}, and cannot be interpreted or applied."
+            logWhat = f"GITHUB_UPDATE_CHECKER_LOG_LEVEL set to {os.environ.get('GITHUB_UPDATE_CHECKER_LOG_LEVEL')}, and cannot be interpreted or applied."
         
     except Exception as err:
         app.logger.setLevel(logging.INFO)
         makeANoteOnLogging = True
-        logWhat = f"LOG_LEVEL is '{os.environ.get('LOG_LEVEL')}'. Can't eval LOG_LEVEL for {err}"        
+        logWhat = f"LOG_LEVEL is '{os.environ.get('GITHUB_UPDATE_CHECKER_LOG_LEVEL')}'. Can't eval LOG_LEVEL for {err}"        
     
     app.logger.critical(f"Starting gitHubUpdateChecker at {datetime.now()}")
     app.logger.critical(f"Log level set to {app.logger.getEffectiveLevel()}")
@@ -208,6 +208,10 @@ def create_app(test_config=None):
     app.config["repoRepository"] = {}
     app.config["repoRegistry"] = {}
     app.config["dateTimeFormat"] = dateTimeFormat
+    
+    os.environ.setdefault("GITHUB_UPDATE_CHECKER_DISABLE_FORCED_CHECKS", "False")
+    app.config["disableForcedChecks"] = os.environ.get("GITHUB_UPDATE_CHECKER_DISABLE_FORCED_CHECKS", "False") == True
+    app.logger.critical(f"Forcing update checks is {'disabled' if app.config['disableForcedChecks'] else 'enabled'}")
         
     # a simple page that says hello
     @app.route('/hello')
@@ -302,9 +306,10 @@ def checkUpdates():
 
         # See if update check is necessary ----------------------------------------------------------------------------------------
 
-        # Check cache expiry only if update check is not forced
-        if not forceUpdateCheck:            
-            # Check if update check shall be performed based on frequency and suppress error if it cannot to not bother the user
+        # Check cache expiry only if update check is not forced or if it cannot be forced either
+        if not forceUpdateCheck or _isForcedCheckDisabled():            
+            # Check if update check shall be performed based on frequency and suppress error if it cannot be perform 
+            # to not bother the user
             with contextlib.suppress(Exception):
                 delta = datetime.now() - updateInfo.repository.getLastCheckedTimestamp()
                 if delta.days < updateInfo.repository.getCheckFrequencyDays(): # recently checked
@@ -391,6 +396,15 @@ def checkUpdates():
         pass
 
     return response
+
+# Tell if clients can force checks ================================================================================================    
+def _isForcedCheckDisabled() -> bool:
+    """Tell if clients can force checks or are restricted to cached information when available and not expired.
+
+    Returns:
+        bool: True if clients cannot force requests and False if they can (default).
+    """
+    return app.config["disableForcedChecks"] if "disableForcedChecks" in app.config else False
 
 # Populate update info object from GitHub response ================================================================================
 def _populateUpdateInfoFromGitHubResponse(response: Response, updateInfo: UpdateInfo, repoConn: RepositoryAccessManager):

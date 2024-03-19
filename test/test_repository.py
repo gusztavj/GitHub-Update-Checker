@@ -72,7 +72,9 @@ class TestRepositoryAccessManager:
         """Can instantiate the RepositoryAccessManager class with a valid repository slug"""
         
         repo_access_manager = RepositoryAccessManager("T1nkR-Mesh-Name-Synchronizer")
-        assert isinstance(repo_access_manager, RepositoryAccessManager)
+        assert \
+            isinstance(repo_access_manager, RepositoryAccessManager), \
+            "The access manager is of a wrong type"
 
     #==============================================================================================================================
     # Can get the URL of the repository
@@ -80,7 +82,9 @@ class TestRepositoryAccessManager:
         """Can get the URL of the repository"""
         
         repo_access_manager = RepositoryAccessManager("T1nkR-Mesh-Name-Synchronizer")
-        assert repo_access_manager.repoUrl() == "https://github.com/gusztavj/T1nkR-Mesh-Name-Synchronizer/"
+        assert \
+            repo_access_manager.repoUrl() == "https://github.com/gusztavj/T1nkR-Mesh-Name-Synchronizer/", \
+            "Wrong repository URL constructed"
 
     #==============================================================================================================================
     # Can get the API URL to get latest release information
@@ -88,7 +92,9 @@ class TestRepositoryAccessManager:
         """Can get the API URL to get latest release information"""
         
         repo_access_manager = RepositoryAccessManager("T1nkR-Mesh-Name-Synchronizer")
-        assert repo_access_manager.repoReleaseApiUrl() == "https://api.github.com/repos/gusztavj/T1nkR-Mesh-Name-Synchronizer/releases/latest"
+        assert \
+            repo_access_manager.repoReleaseApiUrl() == "https://api.github.com/repos/gusztavj/T1nkR-Mesh-Name-Synchronizer/releases/latest", \
+            "Wrong repository release API URL constructed"
 
     #==============================================================================================================================
     # Throws EnvironmentError when repo slug is just a dash (during initialization)
@@ -126,9 +132,12 @@ class TestRepositoryAccessManager:
             repo_access_manager.setRepoSlug("/")
             
 
-
 # Tests for the AppInfo class #####################################################################################################
 class TestAppInfo:
+    """
+    Test the creation and modification of attributes for an instance of AppInfo.
+    """
+
 
     #==============================================================================================================================
     # Creating an instance of AppInfo with valid repoSlug and currentVersion should return an object with the same attributes.
@@ -136,8 +145,13 @@ class TestAppInfo:
         """Creating an instance of AppInfo with valid repoSlug and currentVersion should return an object with the same attributes."""
         
         app_info = AppInfo(repoSlug="user/repo", currentVersion="1.0.0")
-        assert app_info.repoSlug == "user/repo"
-        assert app_info.currentVersion == "1.0.0"
+        assert \
+            app_info.repoSlug == "user/repo", \
+            "Wrong repo slug found in app_info"
+            
+        assert \
+            app_info.currentVersion == "1.0.0", \
+            "Wrong current version found in app_info"
 
     #==============================================================================================================================
     # Modifying the attributes of an instance of AppInfo should update the values of the attributes accordingly.
@@ -147,12 +161,23 @@ class TestAppInfo:
         app_info = AppInfo(repoSlug="user/repo", currentVersion="1.0.0")
         app_info.repoSlug = "new_user/new_repo"
         app_info.currentVersion = "2.0.0"
-        assert app_info.repoSlug == "new_user/new_repo"
-        assert app_info.currentVersion == "2.0.0"
+        
+        assert \
+            app_info.repoSlug == "new_user/new_repo", \
+            "Could not properly change repo slug in app info"
+                
+        assert \
+            app_info.currentVersion == "2.0.0", \
+            "Could not properly change current version in app info"
     
 
 # Tests for the Repository class ##################################################################################################
 class TestRepository:
+    """
+    Test the creation and behavior of the Repository class.
+
+    """
+
 
     #==============================================================================================================================
     # Creating a new instance of Repository with default values should fail for having no repo slug specified
@@ -179,13 +204,13 @@ class TestRepository:
             repoUrl="https://github.com/my-repo"
         )
         
-        assert repo.getRepoSlug() == "my-repo"
-        assert repo.getCheckFrequencyDays() == 7
-        assert repo.latestVersion == "1.0.0"
-        assert repo.latestVersionName == "Release 1.0.0"
-        assert repo.getLastCheckedTimestamp() == exceptedTimeStamp
-        assert repo.releaseUrl == "https://github.com/my-repo/releases/tag/1.0.0"
-        assert repo.repoUrl == "https://github.com/my-repo"
+        assert repo.getRepoSlug() == "my-repo"                                      , "Wrong repo slug found in created Repository instance"
+        assert repo.getCheckFrequencyDays() == 7                                    , "Wrong checking frequency found in created Repository instance"
+        assert repo.latestVersion == "1.0.0"                                        , "Wrong latest version found in created Repository instance"
+        assert repo.latestVersionName == "Release 1.0.0"                            , "Wrong latest version name found in created Repository instance"
+        assert repo.getLastCheckedTimestamp() == exceptedTimeStamp                  , "Wrong timestamp for last check found in created Repository instance"
+        assert repo.releaseUrl == "https://github.com/my-repo/releases/tag/1.0.0"   , "Wrong release URL found in created Repository instance"
+        assert repo.repoUrl == "https://github.com/my-repo"                         , "Wrong repo URL found in created Repository instance"
 
     #==============================================================================================================================
     # Updating the lastCheckedTimestamp property of a Repository instance should change its value to the new value.
@@ -195,7 +220,7 @@ class TestRepository:
         repo = Repository("Foo")
         new_timestamp = datetime.now()
         repo.setLastCheckedTimestamp(new_timestamp)
-        assert repo.getLastCheckedTimestamp() == new_timestamp
+        assert repo.getLastCheckedTimestamp() == new_timestamp, "Could not properly change timestamp in a Repository object"
 
     #==============================================================================================================================
     # Creating a new instance of Repository with a negative checkFrequencyDays value should raise a ValueError.
@@ -225,10 +250,12 @@ class TestRepositoryEncoder:
         repo = Repository(repoSlug="test_repo")
         encoder = RepositoryEncoder()
         json_data = encoder.encode(repo)
-        assert re.match(
-            '\{"repoSlug": "test_repo", "checkFrequencyDays": \d+, "lastCheckedTimestamp": "[^"]*", "latestVersion": "", "latestVersionName": "", "releaseUrl": "", "repoUrl": ""\}',
-            json_data
-        )
+        assert \
+            re.match(
+                '\{"repoSlug": "test_repo", "checkFrequencyDays": \d+, "lastCheckedTimestamp": "[^"]*", "latestVersion": "", "latestVersionName": "", "releaseUrl": "", "repoUrl": ""\}',
+                json_data
+            ), \
+            "Error in serializing a Repository object"
 
     #==============================================================================================================================
     # Datetime objects can be serialized to JSON using the custom default method of RepositoryEncoder.
@@ -238,7 +265,7 @@ class TestRepositoryEncoder:
         dt = datetime(2022, 1, 1)
         encoder = RepositoryEncoder()
         json_data = encoder.encode(dt)
-        assert json_data == '"2022-01-01 00:00:00"'
+        assert json_data == '"2022-01-01 00:00:00"', "Error in encoding datetime value"
 
     #==============================================================================================================================
     # The custom default method returns the __dict__ representation of non-datetime objects.
@@ -248,7 +275,7 @@ class TestRepositoryEncoder:
         obj = {"key": "value"}
         encoder = RepositoryEncoder()
         json_data = encoder.encode(obj)
-        assert json_data == '{"key": "value"}'
+        assert json_data == '{"key": "value"}', "Error in encoding a key-value pair"
 
     #==============================================================================================================================
     # The object passed to the default method is not a datetime object or a Repository object.
@@ -258,7 +285,7 @@ class TestRepositoryEncoder:
         obj = {}
         encoder = RepositoryEncoder()
         json_data = encoder.encode(obj)
-        assert json_data == '{}'
+        assert json_data == '{}', "Error encoding empty object"
 
     #==============================================================================================================================
     # The datetime object passed to the default method is not in the format specified in the app configuration.
@@ -269,7 +296,7 @@ class TestRepositoryEncoder:
         app.config = {"dateTimeFormat": "%Y-%m-%d"}
         encoder = RepositoryEncoder()
         json_data = encoder.encode(dt)
-        assert json_data == '"2022-01-01"'
+        assert json_data == '"2022-01-01"', "Error encoding unexpectedly formatted datetime"
 
     #==============================================================================================================================
     # Repository object contains non-serializable attributes.
@@ -285,10 +312,14 @@ class TestRepositoryEncoder:
         encoder = RepositoryEncoder()
         with pytest.raises(EnvironmentError):        
             json_data = encoder.encode(obj)
-            assert json_data == '{"attr": {}}'
+            assert json_data == '{"attr": {}}', "Non-serializable attributes serialized"
+
 
 # Tests for the RepositoryDecoder class ###########################################################################################
 class TestRepositoryDecoder:
+    """
+    Test the decoding of dictionaries into Repository objects using the RepositoryDecoder class.
+    """
     
     #==============================================================================================================================
     # Decodes a valid dictionary into a Repository object with a mocked 'app' object.
@@ -312,14 +343,15 @@ class TestRepositoryDecoder:
 
         repo = RepositoryDecoder.decode(repo_dict)
 
-        assert isinstance(repo, Repository)
-        assert repo.repoSlug == "my-repo"
-        assert repo.checkFrequencyDays == 7
-        assert repo.latestVersion == "1.0.0"
-        assert repo.latestVersionName == "First Release"
-        assert repo.lastCheckedTimestamp == datetime.strptime(repo_dict["lastCheckedTimestamp"], repository.app.config["dateTimeFormat"])
-        assert repo.releaseUrl == "https://github.com/my-repo/releases/latest"
-        assert repo.repoUrl == "https://github.com/my-repo"
+        assert isinstance(repo, Repository)                                     , "The 'repo' object is of a wrong type after decoding"
+        assert repo.repoSlug == "my-repo"                                       , "Decoding resulted in unexpected value for the repo slug"
+        assert repo.checkFrequencyDays == 7                                     , "Decoding resulted in unexpected value for the update checking frequency"
+        assert repo.latestVersion == "1.0.0"                                    , "Decoding resulted in unexpected value for the latest version's number"
+        assert repo.latestVersionName == "First Release"                        , "Decoding resulted in unexpected value for the latest version name"
+        assert repo.lastCheckedTimestamp == datetime.strptime(repo_dict["lastCheckedTimestamp"], repository.app.config["dateTimeFormat"]) \
+                                                                                , "Decoding resulted in unexpected value for the timestamp of the last update check"
+        assert repo.releaseUrl == "https://github.com/my-repo/releases/latest"  , "Decoding resulted in unexpected value for the release URL"
+        assert repo.repoUrl == "https://github.com/my-repo"                     , "Decoding resulted in unexpected value for the repo URL"
     
     
     #==============================================================================================================================
@@ -341,8 +373,13 @@ class TestRepositoryDecoder:
         with pytest.raises(EnvironmentError):
             RepositoryDecoder.decode(repo_dict)
                 
+                
 # Tests for the RepositoryStore class #############################################################################################
 class TestRepositoryStore:
+    """
+    Test the behavior of the RepositoryStore class.
+
+    """
     
     #==============================================================================================================================
     # Cannot add an object that is not a Repository to the RepositoryStore
@@ -352,14 +389,19 @@ class TestRepositoryStore:
         repoStore = RepositoryStore()
         with pytest.raises(EnvironmentError):
             repoStore.append("not a repository")
-        assert len(repoStore) == 0
+        
+        assert len(repoStore) == 0, "Objects of a type other than Repository could be added to the Repository Store"
         
         
 # Tests for the RepositoryStoreManager class ####################################################################################==
 class TestRepositoryStoreManager:
+    """
+    Test the behavior of the RepositoryStoreManager class.
+    """
 
     #==============================================================================================================================
-    # Populating the repository store from the repository store file with valid data should result in the 'RepositoryStoreManager.repos' property being populated with 'Repository' objects.
+    # Populating the repository store from the repository store file with valid data should result in the 
+    # 'RepositoryStoreManager.repos' property being populated with 'Repository' objects.
     def test_populate_repository_store_with_valid_data(self):
         """Populating the repository store from the repository store file with valid data should result in the 'RepositoryStoreManager.repos' property being populated with 'Repository' objects."""
         
@@ -402,8 +444,13 @@ class TestRepositoryStoreManager:
             RepositoryStoreManager._populateRepositoryStore()
 
         # Assert that the repository store is populated with Repository objects
-        assert isinstance(RepositoryStoreManager.repoStore, RepositoryStore)
-        assert all(isinstance(repo, Repository) for repo in RepositoryStoreManager.repoStore)
+        assert \
+            isinstance(RepositoryStoreManager.repoStore, RepositoryStore), \
+            "The repoStore property of the RepositoryStoreManager is of a wrong type (other than RepositoryStore)"
+            
+        assert \
+            all(isinstance(repo, Repository) for repo in RepositoryStoreManager.repoStore), \
+            "Some elements of the repoStore property of the RepositoryStoreManager are of a wrong type (other than Repository)"
         
     #==============================================================================================================================
     # Populating the repository store from the repository store file with valid data should result in the 
@@ -447,12 +494,22 @@ class TestRepositoryStoreManager:
         RepositoryStoreManager._populateRepositoryStore()
 
         # Assert that the repository store is of the proper type and is populated with Repository objects
-        assert isinstance(RepositoryStoreManager.repoStore, RepositoryStore)
-        assert all(isinstance(repo, Repository) for repo in RepositoryStoreManager.repoStore)
+        assert \
+            isinstance(RepositoryStoreManager.repoStore, RepositoryStore), \
+            "The repoStore property of the RepositoryStoreManager is of a wrong type (other than RepositoryStore)"
+            
+        assert \
+            all(isinstance(repo, Repository) for repo in RepositoryStoreManager.repoStore), \
+            "Some elements of the repoStore property of the RepositoryStoreManager are of a wrong type (other than Repository)"
         
         # Assert that the non-registered repo is not loaded
-        assert len(RepositoryStoreManager.repoStore) == 1
-        assert RepositoryStoreManager.repoStore[0].repoSlug == app.config["repoRepository"][0]["repoSlug"]
+        assert \
+            len(RepositoryStoreManager.repoStore) == 1, \
+            "The repoStore property of RepositoryStoreManager should contain exactly 1 item"
+            
+        assert \
+            RepositoryStoreManager.repoStore[0].repoSlug == app.config["repoRepository"][0]["repoSlug"], \
+            "The value of the repoSlug attribute of the first item of the repoStore attribute of the RepositoryStoreManager class is unexpected"
         
     
     #==============================================================================================================================
@@ -515,10 +572,15 @@ class TestRepositoryStoreManager:
                 
 
         # Assert that the repository store is empty
-        assert len(RepositoryStoreManager.repoStore) == 0
+        assert len(RepositoryStoreManager.repoStore) == 0, "The repoStore property of RepositoryStoreManager should be an empty list"
 
-
+    #==============================================================================================================================
+    # Check if only registered repositories are deserialized from the repository store file
     def test_loadRepositoryRegistry_happy_path(self):
+        """
+        Test the happy path for loading the repository registry.
+        """
+
         # Constants for tests
         SUPPORTED_REPOSITORIES = ["repo1", "repo2", "repo3"]
         EXTRA_REPOSITORY = ["repo4"]
@@ -533,25 +595,40 @@ class TestRepositoryStoreManager:
                     RepositoryStoreManager._loadRepositoryRegistry()
 
                     # Assert items are loaded as the list was empty
-                    assert len(app.config[RepositoryStoreManager._repoRegistryKey]) == len(SUPPORTED_REPOSITORIES)
+                    assert \
+                        len(app.config[RepositoryStoreManager._repoRegistryKey]) == len(SUPPORTED_REPOSITORIES), \
+                        "The repo registry in app config has unexpected number of items after loading the repo registry"
                     
                     with patch("builtins.open", mock_open(read_data=json.dumps({"supported-repositories": EXTRA_REPOSITORY}))):
                         RepositoryStoreManager._loadRepositoryRegistry()
 
                         # Assert the length is the same, no new item was loaded
-                        assert len(app.config[RepositoryStoreManager._repoRegistryKey]) == len(SUPPORTED_REPOSITORIES)
+                        assert \
+                            len(app.config[RepositoryStoreManager._repoRegistryKey]) == len(SUPPORTED_REPOSITORIES), \
+                            "While the app.config contained the repo registry, another attempt to load the registry file again \
+                            resulted in new items being added to the registry in app.config"
 
-        loadRepoRepo_edge_case_data = [
-        # Add edge case scenarios here
-    ]
-
-    
-    @pytest.mark.parametrize("test_id, exception, error_message", 
-    [
-        ("EC001", OSError, "Could not load repository registry"),  # OSError when opening file
-        ("EC002", json.JSONDecodeError, "JSONDecodeError"),  # JSON decode error
+    #==============================================================================================================================
+    # Check error handling for loading registered repositories
+    @pytest.mark.parametrize(
+        "test_id, exception,            error_message", [
+        ("EC001", OSError,              "Could not load repository registry"),  # OSError when opening file
+        ("EC002", json.JSONDecodeError, "JSONDecodeError"),                     # JSON decode error
     ])
     def test_loadRepositoryRegistry_error_cases(self, test_id, exception, error_message):
+        """
+        Test the error cases for loading the repository registry.
+
+        Args:
+            self: The instance of the test case.
+            test_id (str): The identifier for the test case.
+            exception (Exception): The expected exception class.
+            error_message (str): The expected error message.
+
+        Raises:
+            AssertionError: If the response code, response message, or log entries do not match the expected values.
+        """
+        
         SUPPORTED_REPOSITORIES = ["repo1", "repo2", "repo3"]
         
         # Arrange
@@ -565,59 +642,132 @@ class TestRepositoryStoreManager:
                         # Act & Assert
                         with pytest.raises(EnvironmentError) as exc_info:
                             RepositoryStoreManager._loadRepositoryRegistry()
-                        assert exc_info.value.responseCode == 500
-                        assert "An internal error occurred. Mention the following error key when requesting support:" in exc_info.value.responseMessage
-                        assert error_message in str(exc_info.value.logEntries)
+                        
+                        assert \
+                            exc_info.value.responseCode == 500, \
+                            "Unexpected response code for repo registry loading error"
+                            
+                        assert \
+                            "An internal error occurred. Mention the following error key when requesting support:" in exc_info.value.responseMessage, \
+                            "Unexpected error message provided to client upon repo registry loading error"
+                                
+                        assert \
+                            error_message in str(exc_info.value.logEntries), \
+                            "Detailed error message not found in application log about repo registry loading error"
 
 
-# Assuming RepositoryStoreManager and RepositoryEncoder are defined in repository.py
-
-    @pytest.mark.parametrize("test_id, repo_store, repo_registry, expected_output, expected_exception, expected_message", [
+    #==============================================================================================================================
+    # Check saving repositories when everything is okay
+    @pytest.mark.parametrize(
+        "test_id,       repo_store,         repo_registry", [
         # Happy path tests
-        ("happy-1", ["repo1", "repo2"], ["repo1", "repo2"], '[\n    "repo1",\n    "repo2"\n]', None, ""),
-        ("happy-2", ["repo1", "repo2"], ["repo1"], '[\n    "repo1"\n]', None, ""),
-        ("happy-3", [], [], '[]', None, ""),
-        
+        ("happy-1",     ["repo1", "repo2"], ["repo1", "repo2"]),
+        ("happy-2",     ["repo1", "repo2"], ["repo1"]),
+        ("happy-3",     ["repo1"],          ["repo1"]),
         # Edge cases
-        ("edge-1", ["repo1"], ["repo1"], '[\n    "repo1"\n]', None, ""),
-        
-        # Error cases
-        ("error-1", ["repo1"], ["repo1"], None, IOError, "Failed to open file for writing"),
+        ("edge-1",      ["repo1"],          []),
+        ("edge-2",      [],                 ["repo1"]),
+        ("edge-3",      [],                 []),
     ])
-    def test_saveRepoRepository(self, test_id, repo_store, repo_registry, expected_output, expected_exception, expected_message):
+    def test_saveRepoRepositoryHappyCases(self, test_id, repo_store, repo_registry):
+        """
+        Test the happy path and edge cases for saving the repository store.
+
+        Args:
+            test_id (str): The identifier for the test case.
+            repo_store (list): The list of repository slugs.
+            repo_registry (list): The list of registered repository slugs.
+
+        Raises:
+            AssertionError: If the file 'repo_store.json' was not opened for saving the repository store as expected, 
+            or if not exactly the registered repositories were saved to the repository store.
+        """
+
         
         def mock_isRepoRegistered(*args, **kwargs):
+            """Mock the result as requested by test data"""
             return args[0] in repo_registry
             
         # Arrange
-        RepositoryStoreManager.repoStore = repo_store
+        
+        # Create repository objects from slugs        
+        [RepositoryStoreManager.repoStore.append(Repository(repoSlug)) for repoSlug in repo_store]
+        
         RepositoryStoreManager._repoStoreFile = "repo_store.json"
         m_open = mock_open()
 
         # Act        
         with patch("builtins.open", m_open):
-            if expected_exception:
-                # Mock app.logger.error
-                logger_mock = MagicMock()
-                with patch("repository.app.logger.error", logger_mock):
-                    with patch.object(RepositoryStoreManager, "isRepoRegistered", side_effect=mock_isRepoRegistered):
-                        m_open.side_effect = OSError("Failed to open file for writing")                        
-                        RepositoryStoreManager.saveRepoRepository()
-                    
-                    logMessageFound = any("Could not save repository store to 'repo_store.json' for an error of OSError: Failed to open file for writing" in call_args[0] for call_args in logger_mock.call_args_list)
-                    assert logMessageFound, "The heading of the log entry about the exception during repository store saving is missing"
-                    
-            else:
-                with patch.object(RepositoryStoreManager, "isRepoRegistered", side_effect=mock_isRepoRegistered):
-                    RepositoryStoreManager.saveRepoRepository()
-                    
-                m_open.assert_called_once_with("repo_store.json", "w")
-                m_open().write.assert_called_once_with(expected_output)
+            with patch.object(RepositoryStoreManager, "isRepoRegistered", side_effect=mock_isRepoRegistered):
+                RepositoryStoreManager.saveRepoRepository()
+                
+            assert \
+                any(("repo_store.json", "w") in call for call in m_open.mock_calls), \
+                f"{test_id}: The file 'repo_store.json' was not opened for saving the repository store as expected."
+            
+            mockedOutput = m_open().write.call_args.args[0]
+            
+            assert \
+                all(repoSlug in mockedOutput for repoSlug in repo_store if repoSlug in repo_registry), \
+                f"{test_id}: Not exactly the registered repositories were saved to the repository store"
+                
+                
+    #==============================================================================================================================
+    # Check error handling when saving repositories
+    @pytest.mark.parametrize(
+        "test_id,   repo_store, repo_registry,  expected_exception, expected_message", [
+        ("error-1", ["repo1"],  ["repo1"],      OSError,            "Failed to open file for writing"),
+    ])
+    def test_saveRepoRepositoryErrorCases(self, test_id, repo_store, repo_registry, expected_exception, expected_message):
+        """
+        Test the error cases for saving the repository store.
 
+        Args:
+            test_id (str): The identifier for the test case.
+            repo_store (list): The list of repository slugs.
+            repo_registry (list): The list of registered repository slugs.
+            expected_exception (Exception): The expected exception class.
+            expected_message (str): The expected error message.
+
+        Raises:
+            AssertionError: If the heading of the log entry about the exception during repository store saving is missing.
+        """
+
+        def mock_isRepoRegistered(*args, **kwargs):
+            """Mock the result as requested by test data"""
+            return args[0] in repo_registry
+            
+        # Arrange
+        
+        # Create repository objects from slugs        
+        [RepositoryStoreManager.repoStore.append(Repository(repoSlug)) for repoSlug in repo_store]
+        
+        RepositoryStoreManager._repoStoreFile = "repo_store.json"
+        m_open = mock_open()
+
+        # Act        
+        with patch("builtins.open", m_open):
+            logger_mock = MagicMock()
+            with patch("repository.app.logger.error", logger_mock):
+                with patch.object(RepositoryStoreManager, "isRepoRegistered", side_effect=mock_isRepoRegistered):
+                    m_open.side_effect = expected_exception(expected_message)                        
+                    RepositoryStoreManager.saveRepoRepository()
+                
+                logMessageFound = \
+                    any(f"Could not save repository store to 'repo_store.json' for an error of {expected_exception.__name__}: {expected_message}" \
+                        in call_args[0] for call_args \
+                            in logger_mock.call_args_list)
+                
+                assert \
+                    logMessageFound, \
+                    f"{test_id}: The heading of the log entry about the exception during repository store saving is missing"                               
 
 
 # Tests for the UpdateInfo class ##################################################################################################
 class TestUpdateInfo:
+    """
+    Test the creation of an instance of UpdateInfo with default values.
+    """
     
     #==============================================================================================================================
     # Create an instance of UpdateInfo with default values.

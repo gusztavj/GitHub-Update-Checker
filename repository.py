@@ -142,7 +142,7 @@ class RepositoryAccessManager:
     def username(self):  # sourcery skip: class-extract-method
         """Username for API access"""
         
-        username = os.environ.get("GITHUB_USER_NAME")    
+        username = os.environ.get("GITHUB_UPDATE_CHECKER_GITHUB_USER_NAME")    
         
         if username is None:
             raise ValueError("The GitHub user name is not set.")
@@ -155,7 +155,7 @@ class RepositoryAccessManager:
     def token(self):
         """GitHub token"""
         
-        token = os.environ.get('GITHUB_API_TOKEN')
+        token = os.environ.get('GITHUB_UPDATE_CHECKER_GITHUB_API_TOKEN')
                 
         if token is None:
             raise ValueError("The GitHub access token is not set.")
@@ -728,7 +728,7 @@ class RepositoryStoreManager:
         
         try:
             # Filter for supported repositories to make sure no unsupported repository is saved
-            supportedRepositories = [repo for repo in RepositoryStoreManager.repoStore if RepositoryStoreManager.isRepoRegistered(repo)]
+            supportedRepositories = [repo for repo in RepositoryStoreManager.repoStore if RepositoryStoreManager.isRepoRegistered(repo.repoSlug)]
 
             with open(RepositoryStoreManager._repoStoreFile, "w") as f:
                 f.write(json.dumps(supportedRepositories, cls=RepositoryEncoder, indent=4))
