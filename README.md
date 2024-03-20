@@ -64,9 +64,10 @@ The application is intended to always return a proper HTTP response and let the 
 
 You can configure the following environment variables for **GitHub Update Checker**:
 
-* **GITHUB_USER_NAME** contains your username for which the token is issued.
-* **GITHUB_API_TOKEN** contains your PAT or other API token.
-* **LOG_LEVEL** can be one of the Pythong logging constants, `logging.ERROR`, `logging.WARNING`, `logging.INFO` or `logging.DEBUG`. Other values or absence of this property trigger INFO level logging.
+* **GITHUB_UPDATE_CHECKER_GITHUB_USER_NAME** contains your username for which the token is issued.
+* **GITHUB_UPDATE_CHECKER_GITHUB_API_TOKEN** contains your PAT or other API token.
+* **GITHUB_UPDATE_CHECKER_LOG_LEVEL** can be one of the Python logging constants, `logging.ERROR`, `logging.WARNING`, `logging.INFO` or `logging.DEBUG`. Other values or absence of this property trigger INFO level logging.
+* **GITHUB_UPDATE_CHECKER_DISABLE_FORCED_CHECKS**, if set to a value of `True` (case doesn't matter), prevents forced checks requested by clients. You can use this to temporarily decrease traffic against GitHub if you find clients force too many checks without a good reason. When true, the application will only make a request against GitHub after the requested repository's cached information expire.
 
 When setting or changing an environment variable, don't forget to restart Python and the app.
 
