@@ -210,8 +210,8 @@ def create_app(test_config=None):
     app.config["dateTimeFormat"] = dateTimeFormat
     
     os.environ.setdefault("GITHUB_UPDATE_CHECKER_DISABLE_FORCED_CHECKS", "False")
-    app.config["disableForcedChecks"] = os.environ.get("GITHUB_UPDATE_CHECKER_DISABLE_FORCED_CHECKS", "False") == True
-    app.logger.critical(f"Forcing update checks is {'disabled' if app.config['disableForcedChecks'] else 'enabled'}")
+    app.config["disableForcedChecks"] = os.environ.get("GITHUB_UPDATE_CHECKER_DISABLE_FORCED_CHECKS", "False") == "True"
+    app.logger.critical(f"Forcing update checks is {'disabled' if app.config['disableForcedChecks'] == True else 'enabled'}")
         
     # a simple page that says hello
     @app.route('/hello')
