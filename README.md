@@ -50,15 +50,29 @@ Information about a GitHub repository (represented by the `Repository` class imp
 
 To avoid superfluous calls to GitHub, this proxy caches results of update checks by saving these repository information to a cache called the **Repository Store**, contained in [repository-store.json](./repository-store.json). (Note that this file is a data file and is therefore added to gitignore, so you'll only find it in your local folders once running the application successfully and performing the first successful check of updates).
 
- An item in the cache expires after some time. This time is 3 days by default, and it can be specified at repository level either when creating the repository programmatically or in the Repository Store.
+An item in the cache expires after some time. This time is 3 days by default, and it can be specified at repository level either when creating the repository programmatically or in the Repository Store.
 
-When a client submits a request for checking if new version is available, it must send its app identifier called the repo slug or repository slug, the `<repo>` part of the URL pattern `https://github.com/<user>/<repo>/`, as well as its current version number in the form of `x.y.z`. The client may also try to force update checking to invalidate the cache.
+When a client submits a request for checking if new version is available, it must send its app identifier called the **repo slug** or **repository slug**, the `<repo>` part of the URL pattern `https://github.com/<user>/<repo>/`, as well as its current version number in the form of `x.y.z`. The client may also try to force update checking to invalidate the cache.
 
 When a request is found and update is not forced, this proxy checks its Repository Store. If it finds repository information for the named application, and founds that it's still up-to-date (meaning that the last request to GitHub for version information happened within the update checking frequency specified for that repo), it will use the cached information to tell the client if there is a newer version, and will return the cached information to the client.
 
 If the cached information is expired, or the client forced the update, or no information is available in the repository store for that repository yet, the proxy performs update check against the corresponding GitHub repository, and in addition to telling the client if a new version is available and providing other information, it also stores the information in the Repository Store so that subsequent non-forced requests can be served from the cache within the time specified by the update checking frequency.
 
 The application is intended to always return a proper HTTP response and let the user know what happened, while trying to not disclose any sensitive information to the client, not even about the internal structures of the application. To be able to find causes of issues, however, error responses always contain an error key, a GUID, which is unique for each session and is included in server log entries. This way, given an error key, you can check the relevant log entries and you can try reproducing what happened. Server logs, when set to more verbose level, contain detailed error messages and exception traces as well.
+
+### Restrictions to Prevent Your Peace of Mind
+
+#### Repository Registry
+
+To limit who can use your application, it only processes a request if it refers to a repository registered in your application instance's **Repository Registry**, namely in [repository-registry.json](./repository-registry.json). To serve requests for a repository, include its repo slug here and restart the application. When the application loads the Repository Store, it only loads items for registered repositories. When it saves the store, it only saves registered repositories. That is, if you want to terminate support for a repository, you can simply delete it from the repository registry and restart the application: it's repository store entry won't be loaded, and the next save operation will clean it up completely from the repository store file.
+
+#### Disabling Forced Checks
+
+You can use the **GITHUB_UPDATE_CHECKER_DISABLE_FORCED_CHECKS** [environment variable](#environment-variables) to disable forced checks. If this variable is set and it is True, even if the client asks for a forced check, the application will disregard it, and will only perform a check against GitHub if the corresponding cache entry is expired, or there's no information about that repository in the cache at all. This is the same as if the request were not forced.
+
+You can use this option to decrease the number of calls to GitHub to control your API Rate Limit.
+
+Once you change this setting, don't forget to restart the application.
 
 ## Environment Variables
 
