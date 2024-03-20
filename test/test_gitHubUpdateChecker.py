@@ -70,6 +70,7 @@ from repository import UpdateInfo, Repository, RepositoryAccessManager
 
 flask.current_app = create_app()
 
+# Create app instance =============================================================================================================
 @pytest.fixture()
 def app():
     app = gitHubUpdateChecker.app
@@ -77,18 +78,16 @@ def app():
         "TESTING": True,
     })
 
-    # other setup can go here
-
     yield app
 
-    # clean up / reset resources here
 
-
+# Create client instance ==========================================================================================================
 @pytest.fixture()
 def client(app):
     return app.test_client()
 
 
+# Create runner instance ==========================================================================================================
 @pytest.fixture()
 def runner(app):
     return app.test_cli_runner()
@@ -138,7 +137,13 @@ class Test_getUpdateInfo:
 
     #==============================================================================================================================
     # Perform a force-unforced-forced check to see if both work
-    def test_forcing_flag(self, client):
+    @pytest.mark.parametrize( \
+        "test_name,                 forcing_disabled,   check_shall_be_forced",
+    [ 
+        ("Forcing enabled",         False,              True),   
+        ("Forcing disabled",        True,               False),  
+    ])
+    def test_forcing_flag(self, app, client, test_name, forcing_disabled, check_shall_be_forced, monkeypatch):
         """
         Check if forcing and non-forcing updates behave correctly.
         """
@@ -158,8 +163,13 @@ class Test_getUpdateInfo:
             assert \
                 response.json["repository"]["repoSlug"] == expected_repo_slug, \
                 "Unexpected repo's data returned"
-            
+        
         # Arrange -----------------------------------------------------------------------------------------------------------------
+        
+        # Set the flag to enable/disable forcing update checks accordingly in app.config
+        monkeypatch.setattr(app.config, '__contains__', lambda x: x == "disableForcedChecks")
+        monkeypatch.setitem(app.config, "disableForcedChecks", forcing_disabled)
+        
         mimetype = 'application/json'
         headers = {
             'Content-Type': mimetype,
@@ -183,6 +193,8 @@ class Test_getUpdateInfo:
         }
         
         url = '/getUpdateInfo'
+        
+        
         
         # Act and assert ----------------------------------------------------------------------------------------------------------
 
@@ -221,8 +233,10 @@ class Test_getUpdateInfo:
         
         secondForcedCheckTimestamp = response.json["repository"]["lastCheckedTimestamp"]
         
-        # Check the timestamps are NOT the same, i.e. an update check was performed the third time
-        assert unForcedCheckTimestamp != secondForcedCheckTimestamp, "Second forced request was not actually forced based on timestamps"
+        # Check the timestamps ARE the same or ARE NOT the same, i.e. an update check was performed the third time, based on forcing flag
+        assert \
+            (unForcedCheckTimestamp != secondForcedCheckTimestamp) == check_shall_be_forced, \
+            f"{test_name}: Second forced request was not actually forced based on timestamps"
 
 
     #==============================================================================================================================
@@ -930,3 +944,42 @@ class Test_checkUpdates:
 
 
 
+# Tests for the _checkUpdates method ##############################################################################################
+class Test_isForcedCheckDisabled:
+    """
+    Test the _isForcedCheckDisabled() function of gitHubUpdateCheker.py
+    """
+
+    #==============================================================================================================================
+    # Data and tests for the function
+    @pytest.mark.parametrize(
+        "test_id,                   config_value,   expected_result", [
+        ("HP1 - Force disabled",    True,           True),
+        ("HP2 - Force enabled",     False,          False),
+        ("EC1 - Force None",        None,           False),
+        ("EC2 - Force empty",       "",             False),
+        ("EC3 - Force #1",          1,              True),
+        ("EC4 - Force #0",          0,              False),
+        ("ERR1 - Force is dict",    {},             False),
+        ("ERR2 - Force is list",    [],             False),
+    ])
+    def test_isForcedCheckDisabled(self, app, test_id, config_value, expected_result, monkeypatch):
+        """
+        Test the _isForcedCheckDisabled function.
+
+        Args:
+            app: The Flask application object.
+            test_id: The unique identifier for the test case.
+            config_value: The value to be set in the app.config["disableForcedChecks"].
+            expected_result: The expected result of the function.
+        """
+        
+        # Arrange -----------------------------------------------------------------------------------------------------------------
+        monkeypatch.setattr(app.config, '__contains__', lambda x: x == "disableForcedChecks")
+        monkeypatch.setitem(app.config, "disableForcedChecks", config_value)
+        
+        # Act ---------------------------------------------------------------------------------------------------------------------
+        result = gitHubUpdateChecker._isForcedCheckDisabled()
+
+        # Assert ------------------------------------------------------------------------------------------------------------------
+        assert result == expected_result, f"Test failed for test_id: {test_id}"

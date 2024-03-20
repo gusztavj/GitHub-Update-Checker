@@ -404,7 +404,7 @@ def _isForcedCheckDisabled() -> bool:
     Returns:
         bool: True if clients cannot force requests and False if they can (default).
     """
-    return app.config["disableForcedChecks"] if "disableForcedChecks" in app.config else False
+    return app.config["disableForcedChecks"] == True if "disableForcedChecks" in app.config else False
 
 # Populate update info object from GitHub response ================================================================================
 def _populateUpdateInfoFromGitHubResponse(response: Response, updateInfo: UpdateInfo, repoConn: RepositoryAccessManager):
@@ -508,6 +508,7 @@ def _getUpdateInfoFromGitHub(repoConn: RepositoryAccessManager) -> Response:
 
 # Parse request body received from user ===========================================================================================
 def _parseRequest(requestJson: dict) -> tuple[bool, str, str]:
+    # sourcery skip: low-code-quality
     """Parse the request JSON and extract relevant information.
 
     Args:
